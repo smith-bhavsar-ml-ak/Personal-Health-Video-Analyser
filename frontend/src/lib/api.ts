@@ -1,6 +1,11 @@
 import type { SessionResult, SessionSummary, VoiceQueryRequest, VoiceQueryResponse } from "./types";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Server-side (SSR/RSC): use internal Docker service name so the frontend container
+// can reach the backend container. Client-side: use the public localhost URL.
+const BASE =
+  typeof window === "undefined"
+    ? (process.env.API_URL ?? "http://localhost:8000")
+    : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000");
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}/api/v1${path}`, init);

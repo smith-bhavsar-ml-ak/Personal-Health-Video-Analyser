@@ -75,6 +75,7 @@ class VoiceQueryRequest(BaseModel):
 
 
 class VoiceQueryResponse(BaseModel):
+    query_text: str
     response_text: str
     audio_b64: str | None = None
 

@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   let sessions = [];
-  try { sessions = await api.listSessions(); } catch {}
+  try { sessions = await api.listSessions(); } catch (e) { console.error("Failed to load sessions:", e); }
 
   const totalReps = sessions.reduce((a, s) => a + s.total_reps, 0);
   const thisWeek = sessions.filter((s) => {

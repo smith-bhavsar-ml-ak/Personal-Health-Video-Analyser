@@ -55,6 +55,7 @@ export interface VoiceQueryRequest {
 }
 
 export interface VoiceQueryResponse {
+  query_text: string;
   response_text: string;
   audio_b64: string | null;
 }

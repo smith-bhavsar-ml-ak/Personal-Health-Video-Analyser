@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function HistoryPage() {
   let sessions = [];
-  try { sessions = await api.listSessions(); } catch {}
+  try { sessions = await api.listSessions(); } catch (e) { console.error("Failed to load sessions:", e); }
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">

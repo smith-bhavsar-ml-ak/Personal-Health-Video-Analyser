@@ -55,4 +55,4 @@ async def voice_query(
     # Persist
     await crud.save_voice_query(db, session_id, query_text, response_text)
 
-    return VoiceQueryResponse(response_text=response_text, audio_b64=audio_b64)
+    return VoiceQueryResponse(query_text=query_text, response_text=response_text, audio_b64=audio_b64)

@@ -46,7 +46,15 @@ function AssistantChat() {
   }, [sessionId]);
 
   const sendText = async (text: string) => {
-    if (!text.trim() || !sessionId) return;
+    if (!text.trim()) return;
+    if (!sessionId) {
+      setMessages((m) => [...m,
+        { role: "user", text, timestamp: new Date().toISOString() },
+        { role: "assistant", text: "Please select a workout session first. Go to History, open a session, and use the Ask Coach button to chat about it.", timestamp: new Date().toISOString() },
+      ]);
+      setInput("");
+      return;
+    }
     const userMsg: Message = { role: "user", text, timestamp: new Date().toISOString() };
     setMessages((m) => [...m, userMsg]);
     setInput("");
@@ -60,8 +68,9 @@ function AssistantChat() {
         timestamp: new Date().toISOString(),
         audio_b64: res.audio_b64,
       }]);
-    } catch {
-      setMessages((m) => [...m, { role: "assistant", text: "Sorry, I couldn't process that. Please try again.", timestamp: new Date().toISOString() }]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setMessages((m) => [...m, { role: "assistant", text: `Error: ${msg}`, timestamp: new Date().toISOString() }]);
     } finally {
       setLoading(false);
     }
@@ -77,15 +86,25 @@ function AssistantChat() {
       const reader = new FileReader();
       reader.onloadend = async () => {
         const b64 = (reader.result as string).split(",")[1];
-        if (sessionId) {
-          setLoading(true);
-          try {
-            const res = await api.voiceQuery(sessionId, { audio_b64: b64 });
-            setMessages((m) => [...m,
-              { role: "user", text: "(Voice query)", timestamp: new Date().toISOString() },
-              { role: "assistant", text: res.response_text, timestamp: new Date().toISOString(), audio_b64: res.audio_b64 },
-            ]);
-          } finally { setLoading(false); }
+        if (!sessionId) {
+          setMessages((m) => [...m,
+            { role: "user", text: "(Voice query)", timestamp: new Date().toISOString() },
+            { role: "assistant", text: "Please select a workout session first before using voice queries.", timestamp: new Date().toISOString() },
+          ]);
+          return;
+        }
+        setLoading(true);
+        try {
+          const res = await api.voiceQuery(sessionId, { audio_b64: b64 });
+          setMessages((m) => [...m,
+            { role: "user", text: res.query_text, timestamp: new Date().toISOString() },
+            { role: "assistant", text: res.response_text, timestamp: new Date().toISOString(), audio_b64: res.audio_b64 },
+          ]);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          setMessages((m) => [...m, { role: "assistant", text: `Voice error: ${msg}`, timestamp: new Date().toISOString() }]);
+        } finally {
+          setLoading(false);
         }
       };
       reader.readAsDataURL(blob);
@@ -156,7 +175,7 @@ function AssistantChat() {
 
         <button
           onClick={() => sendText(input)}
-          disabled={!input.trim() || loading || !sessionId}
+          disabled={!input.trim() || loading}
           className="w-9 h-9 rounded-lg bg-primary hover:bg-primary-dim disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors"
         >
           <Send className="w-4 h-4 text-white" />

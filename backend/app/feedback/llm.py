@@ -1,8 +1,12 @@
+import logging
 import os
+import time
 import ollama
 
+logger = logging.getLogger(__name__)
+
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-MODEL = "llama3.2"
+MODEL = os.getenv("OLLAMA_MODEL", "gpt-oss")
 
 _client = ollama.Client(host=OLLAMA_HOST)
 
@@ -16,6 +20,8 @@ def generate_feedback(workout_context: str) -> str:
     """
     Send structured workout metrics to Ollama llama3.2 and return coaching feedback.
     """
+    logger.info("Sending request to Ollama | model=%s host=%s", MODEL, OLLAMA_HOST)
+    t = time.perf_counter()
     response = _client.chat(
         model=MODEL,
         messages=[
@@ -23,7 +29,9 @@ def generate_feedback(workout_context: str) -> str:
             {"role": "user", "content": f"{workout_context}\n\nPlease provide coaching feedback for this workout."},
         ],
     )
-    return response["message"]["content"]
+    text = response["message"]["content"]
+    logger.info("Ollama responded in %.2fs | %d chars", time.perf_counter() - t, len(text))
+    return text
 
 
 def answer_query(query: str, session_context: str) -> str:

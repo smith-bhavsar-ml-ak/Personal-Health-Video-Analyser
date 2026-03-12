@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -5,11 +6,21 @@ from contextlib import asynccontextmanager
 from app.db.database import init_db
 from app.api.router import api_router
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Starting up Personal Health Video Analyser backend...")
     await init_db()
+    logger.info("Database initialised. Ready.")
     yield
+    logger.info("Shutting down.")
 
 
 app = FastAPI(
