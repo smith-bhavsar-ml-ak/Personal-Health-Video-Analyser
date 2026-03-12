@@ -6,7 +6,7 @@ import ollama
 logger = logging.getLogger(__name__)
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-MODEL = os.getenv("OLLAMA_MODEL", "gpt-oss")
+MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 
 _client = ollama.Client(host=OLLAMA_HOST)
 

@@ -34,6 +34,7 @@ export default function AnalyzePage() {
       setStep(4);
       setResult(data);
       setPhase("done");
+      router.refresh();
     } catch (e: unknown) {
       clearInterval(stepTimer);
       setErrorMsg(e instanceof Error ? e.message : "Analysis failed");

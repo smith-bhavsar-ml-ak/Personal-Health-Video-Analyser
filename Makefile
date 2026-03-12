@@ -5,6 +5,19 @@ BACKEND_URL  = http://localhost:8000
 FRONTEND_URL = http://localhost:3000
 OLLAMA_URL   = http://localhost:11434
 
+# Detect OS for cross-platform commands
+UNAME := $(shell uname -s 2>/dev/null || echo Windows)
+ifeq ($(UNAME),Darwin)
+  PWSH = pwsh
+  OPEN_CMD = open
+else ifeq ($(UNAME),Linux)
+  PWSH = pwsh
+  OPEN_CMD = xdg-open
+else
+  PWSH = powershell
+  OPEN_CMD = start
+endif
+
 .DEFAULT_GOAL := help
 
 # ── Help ──────────────────────────────────────────────────────────────────────
@@ -108,7 +121,7 @@ health:
 
 .PHONY: start-ollama
 start-ollama:
-	@powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-ollama.ps1 -OllamaUrl $(OLLAMA_URL)
+	@$(PWSH) -NoProfile -ExecutionPolicy Bypass -File scripts/start-ollama.ps1 -OllamaUrl $(OLLAMA_URL)
 
 .PHONY: check-ollama
 check-ollama:
@@ -117,7 +130,7 @@ check-ollama:
 
 .PHONY: open
 open:
-	start $(FRONTEND_URL)
+	$(OPEN_CMD) $(FRONTEND_URL)
 
 # ── Cleanup ───────────────────────────────────────────────────────────────────
 .PHONY: clean

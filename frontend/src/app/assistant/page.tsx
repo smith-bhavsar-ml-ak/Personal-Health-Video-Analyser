@@ -1,8 +1,11 @@
 "use client";
 import { useState, useRef, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
-import { Send, Mic, MicOff, X } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Send, Mic, MicOff, X, ChevronRight } from "lucide-react";
+import { clsx } from "clsx";
 import { api } from "@/lib/api";
+import type { SessionSummary } from "@/lib/types";
+import { EXERCISE_LABELS } from "@/lib/types";
 import MessageBubble from "@/components/assistant/MessageBubble";
 import SuggestionChips from "@/components/assistant/SuggestionChips";
 
@@ -14,6 +17,7 @@ interface Message {
 }
 
 function AssistantChat() {
+  const router       = useRouter();
   const searchParams = useSearchParams();
   const sessionId    = searchParams.get("session");
 
@@ -21,36 +25,45 @@ function AssistantChat() {
   const [input, setInput]         = useState("");
   const [loading, setLoading]     = useState(false);
   const [recording, setRecording] = useState(false);
+  const [sessions, setSessions]   = useState<SessionSummary[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const mediaRef  = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+
+  // Fetch sessions list when no session is selected
+  useEffect(() => {
+    if (!sessionId) {
+      api.listSessions()
+        .then((all) => setSessions(all.filter((s) => s.status === "completed")))
+        .catch(() => {});
+    }
+  }, [sessionId]);
+
+  // Reset conversation when session changes
+  useEffect(() => {
+    setMessages([{
+      role: "assistant",
+      text: sessionId
+        ? "I've loaded your workout session. What would you like to know?"
+        : "Hi! I'm your AI Coach. Select a session below to ask specific questions about a workout.",
+      timestamp: new Date().toISOString(),
+    }]);
+  }, [sessionId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => {
-    if (messages.length === 0 && sessionId) {
-      setMessages([{
-        role: "assistant",
-        text: "I've loaded your workout session. What would you like to know?",
-        timestamp: new Date().toISOString(),
-      }]);
-    } else if (messages.length === 0) {
-      setMessages([{
-        role: "assistant",
-        text: "Hi! I'm your AI Coach. Ask me anything about your workouts, or select a session from History first for specific insights.",
-        timestamp: new Date().toISOString(),
-      }]);
-    }
-  }, [sessionId]);
+  const selectSession = (id: string) => {
+    router.push(`/assistant?session=${id}`);
+  };
 
   const sendText = async (text: string) => {
     if (!text.trim()) return;
     if (!sessionId) {
       setMessages((m) => [...m,
         { role: "user", text, timestamp: new Date().toISOString() },
-        { role: "assistant", text: "Please select a workout session first. Go to History, open a session, and use the Ask Coach button to chat about it.", timestamp: new Date().toISOString() },
+        { role: "assistant", text: "Please select a workout session below first.", timestamp: new Date().toISOString() },
       ]);
       setInput("");
       return;
@@ -89,7 +102,7 @@ function AssistantChat() {
         if (!sessionId) {
           setMessages((m) => [...m,
             { role: "user", text: "(Voice query)", timestamp: new Date().toISOString() },
-            { role: "assistant", text: "Please select a workout session first before using voice queries.", timestamp: new Date().toISOString() },
+            { role: "assistant", text: "Please select a workout session below first.", timestamp: new Date().toISOString() },
           ]);
           return;
         }
@@ -122,15 +135,61 @@ function AssistantChat() {
 
   return (
     <div className="max-w-3xl mx-auto h-[calc(100vh-8rem)] flex flex-col gap-4">
-      {/* Session context pill */}
+      {/* Session context pill (when session selected) */}
       {sessionId && (
         <div className="flex items-center gap-2 w-fit">
           <span className="text-xs bg-primary/10 border border-primary/20 text-primary/80 px-3 py-1 rounded-full flex items-center gap-2">
             Viewing session context
-            <button onClick={() => window.history.replaceState({}, "", "/assistant")} className="hover:text-danger cursor-pointer">
+            <button
+              onClick={() => router.push("/assistant")}
+              className="hover:text-danger cursor-pointer"
+            >
               <X className="w-3 h-3" />
             </button>
           </span>
+        </div>
+      )}
+
+      {/* Session picker (when no session selected) */}
+      {!sessionId && sessions.length > 0 && (
+        <div className="bg-surface border border-white/[0.07] rounded-card overflow-hidden flex-shrink-0">
+          <p className="text-xs text-text-muted px-4 pt-3 pb-2 uppercase tracking-widest font-medium">
+            Select a session
+          </p>
+          {sessions.map((s, i) => (
+            <button
+              key={s.id}
+              onClick={() => selectSession(s.id)}
+              className={clsx(
+                "w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-2 transition-colors text-left cursor-pointer",
+                i < sessions.length - 1 && "border-b border-white/5"
+              )}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-text-primary">
+                    {new Date(s.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </span>
+                  {s.exercise_types.map((t) => (
+                    <span key={t} className="text-xs bg-primary/10 text-primary/80 px-1.5 py-0.5 rounded">
+                      {EXERCISE_LABELS[t]}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs text-text-muted mt-0.5">
+                  {s.total_reps} reps · {" "}
+                  <span className={clsx({
+                    "text-health":  s.avg_form_score >= 80,
+                    "text-warning": s.avg_form_score >= 60 && s.avg_form_score < 80,
+                    "text-danger":  s.avg_form_score < 60,
+                  })}>
+                    {s.avg_form_score.toFixed(0)}% form
+                  </span>
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-text-muted flex-shrink-0" />
+            </button>
+          ))}
         </div>
       )}
 
@@ -144,7 +203,7 @@ function AssistantChat() {
             <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
           </div>
         )}
-        {messages.length <= 1 && !sessionId && (
+        {messages.length <= 1 && sessionId && (
           <div className="mt-4">
             <p className="text-xs text-text-muted mb-3">Suggested questions</p>
             <SuggestionChips onSelect={sendText} />
@@ -169,7 +228,7 @@ function AssistantChat() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendText(input)}
-          placeholder={sessionId ? "Ask your AI coach..." : "Select a session first to ask workout-specific questions"}
+          placeholder={sessionId ? "Ask your AI coach..." : "Select a session above to ask workout-specific questions"}
           className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none"
         />
 

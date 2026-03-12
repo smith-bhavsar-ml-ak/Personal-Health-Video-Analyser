@@ -1,28 +1,27 @@
+"use client";
+import { useState, useEffect } from "react";
 import { Activity, RefreshCw, Clock, TrendingUp } from "lucide-react";
 import { api } from "@/lib/api";
+import type { SessionSummary } from "@/lib/types";
 import StatCard from "@/components/dashboard/StatCard";
 import FormTrendChart from "@/components/dashboard/FormTrendChart";
 import RecentSessions from "@/components/dashboard/RecentSessions";
 import ExerciseBreakdown from "@/components/dashboard/ExerciseBreakdown";
 import QuickUpload from "@/components/dashboard/QuickUpload";
 
-export const dynamic = "force-dynamic";
+export default function DashboardPage() {
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
 
-export default async function DashboardPage() {
-  let sessions = [];
-  try { sessions = await api.listSessions(); } catch (e) { console.error("Failed to load sessions:", e); }
+  useEffect(() => {
+    api.listSessions().then(setSessions).catch(console.error);
+  }, []);
 
-  const totalReps = sessions.reduce((a, s) => a + s.total_reps, 0);
-  const thisWeek = sessions.filter((s) => {
-    const d = new Date(s.created_at);
-    const now = new Date();
-    return (now.getTime() - d.getTime()) < 7 * 24 * 60 * 60 * 1000;
-  });
-  const avgScore = sessions.length
+  const totalReps     = sessions.reduce((a, s) => a + s.total_reps, 0);
+  const avgScore      = sessions.length
     ? Math.round(sessions.reduce((a, s) => a + s.avg_form_score, 0) / sessions.length)
     : 0;
   const totalDuration = sessions.reduce((a, s) => a + (s.duration_s ?? 0), 0);
-  const durationMin = Math.round(totalDuration / 60);
+  const durationMin   = Math.round(totalDuration / 60);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-fade-in-up">
@@ -38,8 +37,8 @@ export default async function DashboardPage() {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Total Reps"     value={totalReps}      icon={RefreshCw} accent="primary" />
-        <StatCard label="Sessions"       value={sessions.length} icon={Activity}  accent="health"  />
+        <StatCard label="Total Reps"     value={totalReps}       icon={RefreshCw}  accent="primary" />
+        <StatCard label="Sessions"       value={sessions.length} icon={Activity}   accent="health"  />
         <StatCard label="Avg Form Score" value={`${avgScore}%`}  icon={TrendingUp} accent="primary" />
         <StatCard label="Total Active"   value={`${durationMin}m`} icon={Clock}   accent="health"  />
       </div>
