@@ -1,3 +1,5 @@
+import { MessageCircle } from "lucide-react";
+
 const SUGGESTIONS = [
   "How was my squat form?",
   "How many reps did I do?",
@@ -14,9 +16,10 @@ export default function SuggestionChips({ onSelect }: Props) {
         <button
           key={s}
           onClick={() => onSelect(s)}
-          className="text-left text-sm bg-surface border border-white/[0.07] rounded-lg px-3 py-3 text-text-secondary hover:border-primary/40 hover:text-primary transition-colors duration-150 cursor-pointer"
+          className="text-left text-sm bg-surface border border-white/[0.07] rounded-lg px-3 py-3 text-text-muted hover:border-primary/30 hover:bg-primary/[0.04] hover:text-text-secondary transition-all duration-150 cursor-pointer flex items-start gap-2 group"
         >
-          {s}
+          <MessageCircle className="w-3.5 h-3.5 text-primary/40 group-hover:text-primary/70 mt-0.5 flex-shrink-0 transition-colors" />
+          <span>{s}</span>
         </button>
       ))}
     </div>

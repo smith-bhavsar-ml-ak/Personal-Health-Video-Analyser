@@ -9,6 +9,13 @@ import RecentSessions from "@/components/dashboard/RecentSessions";
 import ExerciseBreakdown from "@/components/dashboard/ExerciseBreakdown";
 import QuickUpload from "@/components/dashboard/QuickUpload";
 
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 export default function DashboardPage() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
 
@@ -28,22 +35,25 @@ export default function DashboardPage() {
       {/* Greeting */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-text-primary">Welcome back</h2>
+          <h2 className="text-2xl font-bold text-text-primary">{greeting()}</h2>
           <p className="text-sm text-text-muted mt-0.5">
             {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+            {sessions.length > 0 && (
+              <span className="ml-2 text-text-muted/70">· {sessions.length} session{sessions.length !== 1 ? "s" : ""} logged</span>
+            )}
           </p>
         </div>
       </div>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Total Reps"     value={totalReps}       icon={RefreshCw}  accent="primary" />
-        <StatCard label="Sessions"       value={sessions.length} icon={Activity}   accent="health"  />
-        <StatCard label="Avg Form Score" value={`${avgScore}%`}  icon={TrendingUp} accent="primary" />
-        <StatCard label="Total Active"   value={`${durationMin}m`} icon={Clock}   accent="health"  />
+        <StatCard label="Total Reps"     value={totalReps}         icon={RefreshCw}  accent="primary" />
+        <StatCard label="Sessions"       value={sessions.length}   icon={Activity}   accent="health"  />
+        <StatCard label="Avg Form Score" value={`${avgScore}%`}    icon={TrendingUp} accent="primary" />
+        <StatCard label="Total Active"   value={`${durationMin}m`} icon={Clock}      accent="health"  />
       </div>
 
-      {/* Charts row */}
+      {/* Charts row — 2/3 + 1/3 */}
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2">
           <FormTrendChart sessions={sessions} />
@@ -51,7 +61,7 @@ export default function DashboardPage() {
         <ExerciseBreakdown sessions={sessions} />
       </div>
 
-      {/* Bottom row */}
+      {/* Bottom row — 2/3 + 1/3 */}
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2">
           <RecentSessions sessions={sessions} />

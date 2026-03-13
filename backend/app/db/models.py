@@ -10,15 +10,28 @@ def new_uuid() -> str:
     return str(uuid.uuid4())
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    email: Mapped[str] = mapped_column(String, unique=True, index=True)
+    hashed_password: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    sessions: Mapped[list["WorkoutSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
 class WorkoutSession(Base):
     __tablename__ = "workout_sessions"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     duration_s: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String, default="processing")  # processing | completed | failed
     error_msg: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    user: Mapped["User | None"] = relationship(back_populates="sessions")
     exercise_sets: Mapped[list["ExerciseSet"]] = relationship(back_populates="session", cascade="all, delete-orphan")
     ai_feedback: Mapped["AIFeedback | None"] = relationship(back_populates="session", cascade="all, delete-orphan", uselist=False)
     voice_queries: Mapped[list["VoiceQuery"]] = relationship(back_populates="session", cascade="all, delete-orphan")
@@ -29,7 +42,7 @@ class ExerciseSet(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
     session_id: Mapped[str] = mapped_column(ForeignKey("workout_sessions.id"))
-    exercise_type: Mapped[str] = mapped_column(String)  # squat | jumping_jack | bicep_curl | lunge | plank
+    exercise_type: Mapped[str] = mapped_column(String)
     rep_count: Mapped[int] = mapped_column(Integer, default=0)
     correct_reps: Mapped[int] = mapped_column(Integer, default=0)
     duration_s: Mapped[int] = mapped_column(Integer, default=0)
@@ -48,7 +61,7 @@ class PostureError(Base):
     set_id: Mapped[str] = mapped_column(ForeignKey("exercise_sets.id"))
     error_type: Mapped[str] = mapped_column(String)
     occurrences: Mapped[int] = mapped_column(Integer, default=1)
-    severity: Mapped[str] = mapped_column(String, default="low")  # low | medium | high
+    severity: Mapped[str] = mapped_column(String, default="low")
 
     exercise_set: Mapped["ExerciseSet"] = relationship(back_populates="posture_errors")
 

@@ -2,19 +2,41 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from sqlalchemy.orm import selectinload
 
-from app.db.models import WorkoutSession, ExerciseSet, PostureError, AIFeedback, VoiceQuery
+from app.db.models import WorkoutSession, ExerciseSet, PostureError, AIFeedback, VoiceQuery, User
 
 
-async def create_session(db: AsyncSession) -> WorkoutSession:
-    session = WorkoutSession()
+# ── User CRUD ────────────────────────────────────────────────────────────────
+
+async def create_user(db: AsyncSession, email: str, hashed_password: str) -> User:
+    user = User(email=email, hashed_password=hashed_password)
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
+    result = await db.execute(select(User).where(User.email == email))
+    return result.scalar_one_or_none()
+
+
+async def get_user_by_id(db: AsyncSession, user_id: str) -> User | None:
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
+
+
+# ── Session CRUD ─────────────────────────────────────────────────────────────
+
+async def create_session(db: AsyncSession, user_id: str) -> WorkoutSession:
+    session = WorkoutSession(user_id=user_id)
     db.add(session)
     await db.commit()
     await db.refresh(session)
     return session
 
 
-async def get_session(db: AsyncSession, session_id: str) -> WorkoutSession | None:
-    result = await db.execute(
+async def get_session(db: AsyncSession, session_id: str, user_id: str | None = None) -> WorkoutSession | None:
+    q = (
         select(WorkoutSession)
         .options(
             selectinload(WorkoutSession.exercise_sets).selectinload(ExerciseSet.posture_errors),
@@ -23,13 +45,17 @@ async def get_session(db: AsyncSession, session_id: str) -> WorkoutSession | Non
         )
         .where(WorkoutSession.id == session_id)
     )
+    if user_id is not None:
+        q = q.where(WorkoutSession.user_id == user_id)
+    result = await db.execute(q)
     return result.scalar_one_or_none()
 
 
-async def list_sessions(db: AsyncSession) -> list[WorkoutSession]:
+async def list_sessions(db: AsyncSession, user_id: str) -> list[WorkoutSession]:
     result = await db.execute(
         select(WorkoutSession)
         .options(selectinload(WorkoutSession.exercise_sets).selectinload(ExerciseSet.posture_errors))
+        .where(WorkoutSession.user_id == user_id)
         .order_by(desc(WorkoutSession.created_at))
     )
     return list(result.scalars().all())
@@ -93,8 +119,8 @@ async def save_voice_query(
     return vq
 
 
-async def delete_session(db: AsyncSession, session_id: str) -> None:
-    session = await get_session(db, session_id)
+async def delete_session(db: AsyncSession, session_id: str, user_id: str | None = None) -> None:
+    session = await get_session(db, session_id, user_id=user_id)
     if session:
         await db.delete(session)
         await db.commit()

@@ -1,4 +1,5 @@
 import logging
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -14,10 +15,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+    if o.strip()
+]
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up Personal Health Video Analyser backend...")
+    logger.info("CORS allowed origins: %s", ALLOWED_ORIGINS)
     await init_db()
     logger.info("Database initialised.")
     preload_model()
@@ -34,7 +42,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

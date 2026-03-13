@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Sidebar from "@/components/layout/Sidebar";
-import Header from "@/components/layout/Header";
+import AppShell from "@/components/layout/AppShell";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 
 export const metadata: Metadata = {
@@ -11,10 +10,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    // suppressHydrationWarning: the anti-flash script below adds "light" class
-    // before React hydrates, so the server/client HTML will intentionally differ.
     <html lang="en" suppressHydrationWarning>
-      {/* Inline script runs synchronously before paint — prevents flash of wrong theme */}
       <head>
         <script dangerouslySetInnerHTML={{ __html: `
           try {
@@ -25,13 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bg-bg text-text-primary flex h-screen overflow-hidden">
         <ThemeProvider>
-          <Sidebar />
-          <div className="flex flex-col flex-1 overflow-hidden">
-            <Header />
-            <main className="flex-1 overflow-y-auto px-8 py-6">
-              {children}
-            </main>
-          </div>
+          <AppShell>{children}</AppShell>
         </ThemeProvider>
       </body>
     </html>

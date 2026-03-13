@@ -1,8 +1,11 @@
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.db import crud
+from app.db.models import User
+from app.auth.deps import get_current_user
 from app.feedback.llm import answer_query
 from app.voice.stt import transcribe_audio
 from app.voice.tts import synthesise_speech
@@ -17,14 +20,15 @@ async def voice_query(
     session_id: str,
     request: VoiceQueryRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    session = await crud.get_session(db, session_id)
+    session = await crud.get_session(db, session_id, user_id=current_user.id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Resolve query text (from audio or direct text)
+    # Resolve query text — run blocking Whisper in thread pool
     if request.audio_b64:
-        query_text = transcribe_audio(request.audio_b64)
+        query_text = await asyncio.to_thread(transcribe_audio, request.audio_b64)
     elif request.query_text:
         query_text = request.query_text
     else:
@@ -46,13 +50,12 @@ async def voice_query(
         ))
     session_context = build_feedback_context(exercise_results)
 
-    # LLM answer
+    # LLM answer (already handles its own timeout)
     response_text = answer_query(query_text, session_context)
 
-    # TTS
-    audio_b64 = synthesise_speech(response_text)
+    # TTS — run blocking pyttsx3 in thread pool
+    audio_b64 = await asyncio.to_thread(synthesise_speech, response_text)
 
-    # Persist
     await crud.save_voice_query(db, session_id, query_text, response_text)
 
     return VoiceQueryResponse(query_text=query_text, response_text=response_text, audio_b64=audio_b64)

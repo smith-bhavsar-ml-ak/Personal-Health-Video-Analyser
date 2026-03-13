@@ -11,6 +11,8 @@ services:
       - OLLAMA_HOST=http://host.docker.internal:11434
       - DATABASE_URL=sqlite:////app/data/phva.db
       - ENV=development
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - ALLOWED_ORIGINS=http://localhost:3000
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
