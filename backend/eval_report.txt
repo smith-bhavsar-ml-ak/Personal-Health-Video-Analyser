@@ -1,0 +1,65 @@
+============================================================
+  BiLSTM Exercise Classifier — Evaluation Report
+============================================================
+  Weights : /Users/smith/Documents/POC/Personal Health Video Analyzer/backend/app/analysis/weights/bilstm_classifier.pt
+  Device  : cpu
+  Params  : 576,261
+  Classes : ['squat', 'jumping_jack', 'bicep_curl', 'lunge', 'plank']
+
+[1]  Overall Accuracy  (noise=0.000, seq_len=60)
+--------------------------------------------------
+     1000 samples (200/class)  →  Accuracy: 100.0%
+
+[2]  Confusion Matrix  (rows=actual, cols=predicted)
+--------------------------------------------------
+                            squat jumping_jack   bicep_curl        lunge        plank
+squat                         200            0            0            0            0
+jumping_jack                    0          200            0            0            0
+bicep_curl                      0            0          200            0            0
+lunge                           0            0            0          200            0
+plank                           0            0            0            0          200
+
+     Per-Class Metrics:
+     class             precision   recall       f1   support
+     -------------------------------------------------------
+     squat                 1.000    1.000    1.000       200
+     jumping_jack          1.000    1.000    1.000       200
+     bicep_curl            1.000    1.000    1.000       200
+     lunge                 1.000    1.000    1.000       200
+     plank                 1.000    1.000    1.000       200
+
+[3]  Noise Robustness  (seq_len=60)
+--------------------------------------------------
+     noise=0.000  →  100.0%
+     noise=0.010  →  100.0%
+     noise=0.020  →  100.0%
+     noise=0.050  →  100.0%
+     noise=0.100  →  99.9%
+     Degradation (0.000→0.100): -0.1pp
+
+[4]  Sequence Length Sensitivity  (noise=0.020)
+--------------------------------------------------
+     seq_len=  15  →  100.0%
+     seq_len=  30  →  100.0%
+     seq_len=  60  →  100.0%
+     seq_len= 120  →  100.0%
+
+[5]  Physics Check Override Rate  (noise=0.000, seq_len=60)
+--------------------------------------------------
+     squat               0 / 200  (0.0%)
+     jumping_jack        0 / 200  (0.0%)
+     bicep_curl          0 / 200  (0.0%)
+     lunge               0 / 200  (0.0%)
+     plank               1 / 200  (0.5%)
+     TOTAL               1 / 1000  (0.1%)
+
+[6]  Inference Speed  (1000 samples, seq_len=60, device=cpu)
+--------------------------------------------------
+     Median latency : 3.38 ms/sample
+     P95 latency    : 3.65 ms/sample
+     P99 latency    : 3.83 ms/sample
+     Throughput     : 296 samples/sec
+
+============================================================
+  Report saved to: /Users/smith/Documents/POC/Personal Health Video Analyzer/backend/eval_report.txt
+============================================================

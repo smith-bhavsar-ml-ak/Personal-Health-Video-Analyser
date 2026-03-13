@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.db import crud
 from app.cv.pipeline import run_cv_pipeline
-from app.analysis.rule_based import run_analysis
+from app.analysis.bilstm_analyser import run_analysis
 from app.analysis.aggregator import aggregate_results, build_feedback_context
 from app.feedback.llm import generate_feedback
 from app.schemas.session import SessionResult, SessionSummary
