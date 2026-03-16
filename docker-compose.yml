@@ -1,29 +1,61 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: phva-postgres
+    environment:
+      POSTGRES_DB: phva
+      POSTGRES_USER: phva
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U phva"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   backend:
     build: ./backend
     container_name: phva-backend
-    ports:
-      - "8000:8000"
-    volumes:
-      - sqlite_data:/app/data
-      - ./backend:/app
     environment:
-      - OLLAMA_HOST=http://host.docker.internal:11434
-      - DATABASE_URL=sqlite:////app/data/phva.db
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - DATABASE_URL=postgresql://phva:${POSTGRES_PASSWORD}@postgres:5432/phva
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-30}
+      - MAX_VIDEO_SIZE_MB=${MAX_VIDEO_SIZE_MB:-200}
+      - ANALYZE_RATE_LIMIT=${ANALYZE_RATE_LIMIT:-10/minute}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost}
     container_name: phva-frontend
-    ports:
-      - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - API_URL=http://backend:8000
     depends_on:
       - backend
     restart: unless-stopped
 
+  nginx:
+    image: nginx:alpine
+    container_name: phva-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
 volumes:
-  sqlite_data:
+  postgres_data:

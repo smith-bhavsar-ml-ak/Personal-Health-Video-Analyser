@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MessageSquare, RotateCcw, Sparkles, ChevronRight } from "lucide-react";
@@ -19,23 +19,39 @@ export default function AnalyzePage() {
   const [step, setStep]         = useState(0);
   const [result, setResult]     = useState<SessionResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clean up poll on unmount
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   const handleAnalyze = async () => {
     if (!file) return;
     setPhase("processing");
     setStep(0);
 
-    const stepTimer = setInterval(() => setStep((s) => Math.min(s + 1, 3)), 3000);
-
     try {
-      const data = await api.analyzeVideo(file);
-      clearInterval(stepTimer);
-      setStep(4);
-      setResult(data);
-      setPhase("done");
-      router.refresh();
+      // Upload immediately — backend queues background task and returns status="processing"
+      const initial = await api.analyzeVideo(file);
+
+      // Poll every 2 s until the background task finishes
+      pollRef.current = setInterval(async () => {
+        setStep((s) => Math.min(s + 1, 3));
+        try {
+          const session = await api.getSession(initial.id);
+          if (session.status === "completed") {
+            clearInterval(pollRef.current!);
+            setStep(4);
+            setResult(session);
+            setPhase("done");
+            router.refresh();
+          } else if (session.status === "failed") {
+            clearInterval(pollRef.current!);
+            setErrorMsg("Analysis failed — please try again");
+            setPhase("error");
+          }
+        } catch { /* ignore transient poll errors */ }
+      }, 2000);
     } catch (e: unknown) {
-      clearInterval(stepTimer);
       setErrorMsg(e instanceof Error ? e.message : "Analysis failed");
       setPhase("error");
     }

@@ -13,6 +13,8 @@ router = APIRouter(tags=["auth"])
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    if len(body.password) < 8:
+        raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
     existing = await crud.get_user_by_email(db, body.email)
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
