@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import '../storage/secure_storage.dart';
 
-const _defaultMobileBase = 'http://localhost';
+const _defaultMobileBase = 'http://192.168.29.148:8000';
 
 // Allow overriding the API base URL at build time:
 // flutter run -d chrome --dart-define=API_BASE=http://192.168.1.10:8000/api/v1

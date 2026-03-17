@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>PHVA needs camera access to record your exercise videos for form analysis.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>PHVA needs microphone access for voice queries to your AI fitness coach.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>PHVA needs photo library access to select workout videos for analysis.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -53,16 +59,6 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
-	<!-- Camera: record exercise videos -->
-	<key>NSCameraUsageDescription</key>
-	<string>PHVA needs camera access to record your exercise videos for form analysis.</string>
-	<!-- Microphone: voice queries to AI coach -->
-	<key>NSMicrophoneUsageDescription</key>
-	<string>PHVA needs microphone access for voice queries to your AI fitness coach.</string>
-	<!-- Photo library: pick workout videos from camera roll -->
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>PHVA needs photo library access to select workout videos for analysis.</string>
-
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
