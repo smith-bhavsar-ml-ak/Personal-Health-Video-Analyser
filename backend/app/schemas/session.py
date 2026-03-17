@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import datetime
 
 
@@ -21,6 +21,11 @@ class ExerciseSetSchema(BaseModel):
     form_score: float
     rep_scores: list[float] = []
     posture_errors: list[PostureErrorSchema] = []
+
+    @field_validator("rep_scores", mode="before")
+    @classmethod
+    def coerce_none_to_list(cls, v):
+        return v if v is not None else []
 
     class Config:
         from_attributes = True

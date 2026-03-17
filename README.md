@@ -1,101 +1,189 @@
-# Personal Health Video Analyzer — Project Documentation
+# Personal Health Video Analyzer (PHVA)
+
+AI-powered fitness coaching app that analyzes exercise form from video, tracks progress over time, and generates personalized workout plans — all running locally with no cloud dependency.
+
+---
 
 ## Table of Contents
 
-1. [Project Overview](#1-project-overview)
-2. [High-Level Architecture](#2-high-level-architecture)
-3. [Repository Structure](#3-repository-structure)
-4. [Backend Deep Dive](#4-backend-deep-dive)
-   - 4.1 [Entry Point & App Bootstrap](#41-entry-point--app-bootstrap)
-   - 4.2 [API Layer](#42-api-layer)
-   - 4.3 [CV Pipeline](#43-cv-pipeline)
-   - 4.4 [Exercise Analysis](#44-exercise-analysis)
-   - 4.5 [LLM Feedback](#45-llm-feedback)
-   - 4.6 [Voice (STT / TTS)](#46-voice-stt--tts)
-   - 4.7 [Database Layer](#47-database-layer)
-5. [Database Design](#5-database-design)
-6. [Full Request Flow — Video Analysis](#6-full-request-flow--video-analysis)
-7. [Frontend Deep Dive](#7-frontend-deep-dive)
-   - 7.1 [Pages](#71-pages)
-   - 7.2 [Components](#72-components)
-   - 7.3 [API Client & Types](#73-api-client--types)
-   - 7.4 [Theme System](#74-theme-system)
-8. [Environment & Configuration](#8-environment--configuration)
-9. [Docker Setup](#9-docker-setup)
-10. [Key Design Decisions](#10-key-design-decisions)
+1. [Business Overview](#1-business-overview)
+2. [Feature Set](#2-feature-set)
+3. [Architecture](#3-architecture)
+4. [Repository Structure](#4-repository-structure)
+5. [Backend Deep Dive](#5-backend-deep-dive)
+   - 5.1 [Auth & Users](#51-auth--users)
+   - 5.2 [Video Analysis Pipeline](#52-video-analysis-pipeline)
+   - 5.3 [BiLSTM Exercise Classifier](#53-bilstm-exercise-classifier)
+   - 5.4 [LLM Coaching (Ollama)](#54-llm-coaching-ollama)
+   - 5.5 [Voice Assistant (STT / TTS)](#55-voice-assistant-stt--tts)
+   - 5.6 [Progress Tracking API](#56-progress-tracking-api)
+   - 5.7 [Workout Plans API](#57-workout-plans-api)
+   - 5.8 [Database Layer](#58-database-layer)
+6. [Database Schema](#6-database-schema)
+7. [Flutter App Deep Dive](#7-flutter-app-deep-dive)
+   - 7.1 [Navigation & Shell](#71-navigation--shell)
+   - 7.2 [Screens](#72-screens)
+   - 7.3 [State Management](#73-state-management)
+   - 7.4 [API Client](#74-api-client)
+   - 7.5 [Design System](#75-design-system)
+8. [Full Request Flows](#8-full-request-flows)
+9. [Environment & Configuration](#9-environment--configuration)
+10. [Docker Setup](#10-docker-setup)
+11. [Development Commands](#11-development-commands)
+12. [Design Decisions](#12-design-decisions)
 
 ---
 
-## 1. Project Overview
+## 1. Business Overview
 
-**Personal Health Video Analyzer (PHVA)** is a full-stack web application that allows users to upload workout videos and receive AI-powered coaching feedback. The system:
+PHVA is a **subscription-ready personal fitness coach** that runs entirely on-device or self-hosted — no cloud APIs, no data leaving the user's infrastructure.
 
-- Extracts frames from the uploaded video
-- Detects human body pose landmarks using **MediaPipe**
-- Classifies exercises and counts reps using rule-based biomechanical analysis
-- Scores exercise form (0–100)
-- Sends structured workout data to a **local Ollama LLM** (llama3.2) for natural-language coaching feedback
-- Lets users query their session via text or voice (Whisper STT + pyttsx3 TTS)
-- Persists everything in a local **SQLite** database
-- Displays results on a **Next.js 14** dashboard
+### Value Proposition
+
+| Problem | PHVA Solution |
+|---------|--------------|
+| Gym members can't afford a personal trainer | AI form coaching at a fraction of the cost |
+| Hard to self-assess exercise form | Computer vision scores every rep objectively |
+| Generic workout programs don't adapt to the user | LLM generates personalised plans from health profile |
+| Progress tracking is fragmented across apps | Unified weight, form score, and rep trends in one place |
+| Privacy concerns with cloud fitness apps | All processing runs locally (Ollama + MediaPipe + Whisper) |
+
+### Target Users
+
+- **Individual fitness enthusiasts** who work out at home or in a gym and want form feedback without a trainer
+- **Personal trainers** who want an objective tool to show clients their progress over time
+- **Physiotherapy clinics** tracking patient movement quality during rehabilitation
+
+### Subscription Model Levers
+
+- **Free tier:** 3 video analyses/month, no history export, no AI plans
+- **Pro tier:** Unlimited analysis, full history, AI-generated plans, voice coach, progress charts
+- **Clinic tier:** Multi-user, patient management, exportable PDF reports
 
 ---
 
-## 2. High-Level Architecture
+## 2. Feature Set
+
+### Video Analysis
+Upload any exercise video (phone camera, webcam recording, screen recording from a fitness app). The system:
+1. Extracts frames at 10 fps using OpenCV
+2. Runs MediaPipe Pose to detect 33 body landmarks per frame
+3. Feeds the landmark sequence through a **BiLSTM neural network** to classify the exercise
+4. Runs a rule-based analyser (specific to the detected exercise) to count reps, score form per rep, and identify posture errors
+5. Sends the structured workout data to a local **Ollama LLM** (llama3.2) for natural-language coaching feedback
+6. Returns the full result in ~5–15 seconds depending on video length
+
+### Rep-Level Feedback
+Every rep gets an individual form score. The session detail screen shows:
+- A bar chart of rep scores across the set
+- Colour-coded quality pills (R1 92% / R3 71% etc.)
+- Posture error rows with severity indicators (low / medium / high)
+
+### Progress Tracking
+Dashboard charts showing trends over all sessions:
+- **Weight over time** — manual weight logging with line chart
+- **Form score trend** — rolling average per session
+- **Exercise breakdown** — reps, avg form score, and correct-rep accuracy per exercise type
+
+### Workout Plans
+AI-generated weekly training schedules based on the user's fitness profile (goal, level, equipment, injury notes). Each plan:
+- Covers 2–8 weeks, 3–5 workout days/week
+- Lists sets, reps, and duration targets per exercise per day
+- Allows tapping individual exercises to mark them complete
+- Falls back to a template plan if the LLM is unavailable
+
+### Exercise Library
+Static reference pages for all supported exercises (Squat, Lunge, Bicep Curl, Jumping Jack, Plank), each with:
+- Muscle groups targeted
+- Step-by-step form cues
+- Common mistakes to avoid
+
+### Voice AI Coach
+Ask natural-language questions about any session. Input can be:
+- **Text** — typed in the chat interface
+- **Voice** — recorded audio → Whisper STT → Ollama LLM → pyttsx3 TTS playback
+
+Suggested question chips and full Q&A history per session.
+
+### Social Sharing
+Share a session summary (date, form score, reps, exercises) as plain text to any app via the OS share sheet (iOS / Android) or clipboard (web).
+
+---
+
+## 3. Architecture
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                        Browser (Next.js 14)                    │
-│  Dashboard · Analyze · History · AI Coach · Session Detail     │
-└─────────────────────────────┬──────────────────────────────────┘
-                              │  HTTP (REST JSON / multipart)
-                              ▼
-┌────────────────────────────────────────────────────────────────┐
-│                    FastAPI  (port 8000)                        │
-│                                                                │
-│  POST /api/v1/sessions/analyze                                 │
-│  GET  /api/v1/sessions                                         │
-│  GET  /api/v1/sessions/{id}                                    │
-│  DELETE /api/v1/sessions/{id}                                  │
-│  POST /api/v1/sessions/{id}/voice                              │
-│  GET  /api/v1/health                                           │
-└──────┬──────────────────────┬───────────────────┬─────────────┘
-       │                      │                   │
-       ▼                      ▼                   ▼
-┌─────────────┐   ┌───────────────────┐  ┌──────────────────┐
-│  CV Pipeline│   │  Ollama (llama3.2)│  │  SQLite Database │
-│             │   │  port 11434       │  │  /app/data/phva.db│
-│  OpenCV     │   │  (runs on host)   │  │                  │
-│  MediaPipe  │   └───────────────────┘  │  sessions        │
-│  Rule-based │                          │  exercise_sets   │
-│  Analyzers  │   ┌───────────────────┐  │  posture_errors  │
-│             │   │  Voice            │  │  ai_feedback     │
-└─────────────┘   │  Whisper STT      │  │  voice_queries   │
-                  │  pyttsx3 TTS      │  └──────────────────┘
-                  └───────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                  Flutter App (iOS · Android · Web)               │
+│                                                                  │
+│  Home  Analyze  History  Progress  Plans  Library  Assistant     │
+│                                                                  │
+│  Riverpod state  ·  GoRouter navigation  ·  Dio HTTP client      │
+└────────────────────────────┬─────────────────────────────────────┘
+                             │  JWT Bearer  ·  multipart/json
+                             ▼
+┌──────────────────────────────────────────────────────────────────┐
+│             Nginx  (reverse proxy + static web build)            │
+│       /api/ → backend:8000     /  → Flutter web (SPA)           │
+└──────────────┬──────────────────────────────────────────────────┘
+               │
+               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                  FastAPI  (Python 3.11, port 8000)               │
+│                                                                  │
+│  /api/v1/auth        /api/v1/sessions    /api/v1/progress        │
+│  /api/v1/profile     /api/v1/voice       /api/v1/plans           │
+│                                                                  │
+│  ┌────────────────┐  ┌────────────────┐  ┌───────────────────┐  │
+│  │  CV Pipeline   │  │  Ollama LLM    │  │  Voice (Whisper + │  │
+│  │  OpenCV        │  │  llama3.2      │  │  pyttsx3 TTS)     │  │
+│  │  MediaPipe     │  │  port 11434    │  └───────────────────┘  │
+│  │  BiLSTM model  │  └────────────────┘                         │
+│  └────────────────┘                                             │
+└───────────────────────────────┬──────────────────────────────────┘
+                                │  asyncpg
+                                ▼
+                   ┌────────────────────────┐
+                   │   PostgreSQL 16         │
+                   │   (Docker volume)       │
+                   └────────────────────────┘
 ```
 
 ---
 
-## 3. Repository Structure
+## 4. Repository Structure
 
 ```
 Personal Health Video Analyzer/
 │
-├── backend/                        # Python/FastAPI service
+├── backend/                         # Python / FastAPI
 │   ├── app/
-│   │   ├── main.py                 # FastAPI app, CORS, DB init
+│   │   ├── main.py                  # App bootstrap, CORS, rate limiter, DB init
 │   │   ├── api/
-│   │   │   ├── sessions.py         # /sessions routes (analyze, list, get, delete)
-│   │   │   └── voice.py            # /voice route (STT/TTS queries)
+│   │   │   ├── router.py            # Aggregates all sub-routers
+│   │   │   ├── sessions.py          # Video upload, list, get, delete
+│   │   │   ├── voice.py             # STT + LLM + TTS endpoint
+│   │   │   ├── progress.py          # Weight log, form trend, exercise stats
+│   │   │   └── plans.py             # AI plan generation + CRUD
+│   │   ├── auth/
+│   │   │   ├── routes.py            # /auth/login, /auth/register, /auth/me
+│   │   │   └── deps.py              # get_current_user JWT dependency
 │   │   ├── cv/
-│   │   │   ├── frame_extractor.py  # OpenCV: video → sampled frames
-│   │   │   ├── pose_detector.py    # MediaPipe: frames → landmark arrays
-│   │   │   └── pipeline.py         # Orchestrates extractor + detector
+│   │   │   ├── frame_extractor.py   # OpenCV: video → sampled frames
+│   │   │   ├── pose_detector.py     # MediaPipe: frames → PoseFrame list
+│   │   │   └── pipeline.py          # Chains extractor + detector
 │   │   ├── analysis/
-│   │   │   ├── base.py             # Abstract ExerciseAnalyser class
-│   │   │   ├── rule_based.py       # Dispatcher: routes frames to correct analyser
-│   │   │   ├── aggregator.py       # Merges per-exercise results into session summary
+│   │   │   ├── base.py              # Abstract ExerciseAnalyser
+│   │   │   ├── rule_based.py        # Dispatcher (classifies → delegates)
+│   │   │   ├── bilstm_model.py      # PyTorch BiLSTM architecture
+│   │   │   ├── bilstm_analyser.py   # Inference: BiLSTM + physics checks
+│   │   │   ├── features.py          # 14-dim feature vector extractor
+│   │   │   ├── aggregator.py        # Merges exercise results → session summary
+│   │   │   ├── train_bilstm.py      # Training script (synthetic/real/mixed)
+│   │   │   ├── preprocess_real_data.py
+│   │   │   ├── evaluate_bilstm.py
+│   │   │   ├── weights/
+│   │   │   │   └── bilstm_classifier.pt
 │   │   │   └── exercises/
 │   │   │       ├── squat.py
 │   │   │       ├── jumping_jack.py
@@ -103,692 +191,576 @@ Personal Health Video Analyzer/
 │   │   │       ├── lunge.py
 │   │   │       └── plank.py
 │   │   ├── feedback/
-│   │   │   └── llm.py              # Ollama client, prompt building, response parsing
+│   │   │   └── llm.py               # Ollama client (feedback + plans + queries)
 │   │   ├── voice/
-│   │   │   ├── stt.py              # Whisper transcription (audio → text)
-│   │   │   └── tts.py              # pyttsx3 synthesis (text → audio base64)
-│   │   └── db/
-│   │       ├── database.py         # Async SQLAlchemy engine + session factory
-│   │       ├── models.py           # ORM table definitions
-│   │       └── crud.py             # All DB read/write operations
+│   │   │   ├── stt.py               # Whisper transcription
+│   │   │   └── tts.py               # pyttsx3 synthesis
+│   │   ├── db/
+│   │   │   ├── database.py          # Async SQLAlchemy engine
+│   │   │   ├── models.py            # ORM table definitions
+│   │   │   └── crud.py              # All DB operations
+│   │   └── schemas/
+│   │       └── session.py           # Pydantic response schemas
+│   ├── alembic/
+│   │   └── versions/
+│   │       ├── 001_initial.py
+│   │       ├── 002_auth_profile.py
+│   │       └── 003_progress_plans.py
+│   ├── tests/                       # pytest (72 passed, 1 xfailed)
 │   ├── requirements.txt
 │   └── Dockerfile
 │
-├── frontend/                       # Next.js 14 / TypeScript
-│   └── src/
-│       ├── app/
-│       │   ├── layout.tsx          # Root layout: sidebar + header + ThemeProvider
-│       │   ├── globals.css         # CSS variables (dark/light theme tokens)
-│       │   ├── page.tsx            # Dashboard (client component, fetches on mount)
-│       │   ├── analyze/page.tsx    # Video upload + analysis results
-│       │   ├── history/page.tsx    # Session list with delete
-│       │   ├── assistant/page.tsx  # AI Coach chat + session picker
-│       │   └── session/[id]/page.tsx # Session detail view
-│       ├── components/
-│       │   ├── layout/
-│       │   │   ├── Sidebar.tsx     # Navigation + Settings modal (theme toggle)
-│       │   │   └── Header.tsx      # Page title bar
-│       │   ├── dashboard/
-│       │   │   ├── StatCard.tsx
-│       │   │   ├── FormTrendChart.tsx
-│       │   │   ├── ExerciseBreakdown.tsx
-│       │   │   ├── RecentSessions.tsx
-│       │   │   └── QuickUpload.tsx
+├── app/                             # Flutter (iOS · Android · Web)
+│   └── lib/
+│       ├── main.dart                # ProviderScope, usePathUrlStrategy (web)
+│       ├── app.dart                 # GoRouter + MaterialApp.router
+│       ├── core/
+│       │   ├── api/
+│       │   │   ├── client.dart      # Dio singleton + auth interceptor
+│       │   │   └── api_service.dart # All API call methods
+│       │   ├── models/              # Dart models with fromJson
+│       │   ├── storage/
+│       │   │   └── secure_storage.dart
+│       │   └── theme/
+│       │       ├── app_theme.dart   # Dark + light MaterialTheme
+│       │       └── exercise_helpers.dart
+│       ├── features/
+│       │   ├── auth/
+│       │   ├── home/
 │       │   ├── analyze/
-│       │   │   ├── VideoUploader.tsx
-│       │   │   ├── AnalysisProgress.tsx
-│       │   │   ├── ExerciseCard.tsx
-│       │   │   ├── RepChart.tsx
-│       │   │   ├── PostureErrorList.tsx
-│       │   │   └── AIFeedbackPanel.tsx
-│       │   └── assistant/
-│       │       ├── MessageBubble.tsx
-│       │       └── SuggestionChips.tsx
-│       ├── contexts/
-│       │   └── ThemeContext.tsx    # Dark/light theme state + localStorage
-│       └── lib/
-│           ├── api.ts              # Typed fetch wrapper for all backend calls
-│           └── types.ts            # Shared TypeScript interfaces
+│       │   ├── sessions/            # history_screen + session_detail_screen
+│       │   ├── assistant/
+│       │   ├── progress/            # Progress charts + weight logging
+│       │   ├── plans/               # Plan list + AI generation + detail
+│       │   ├── library/             # Exercise reference pages
+│       │   ├── settings/
+│       │   └── profile/
+│       └── widgets/
+│           ├── app_shell.dart       # Adaptive sidebar / bottom nav shell
+│           ├── side_nav.dart        # 240px fixed sidebar (web/tablet)
+│           ├── bottom_nav.dart      # 5-tab bottom bar (mobile)
+│           ├── exercise_card.dart   # Expandable set card + rep chart
+│           ├── ai_feedback_panel.dart
+│           ├── score_ring.dart
+│           └── exercise_badge.dart
 │
-├── scripts/
-│   └── start-ollama.ps1            # Cross-platform Ollama start script (pwsh)
-├── docker-compose.yml              # Production stack
-├── docker-compose.dev.yml          # Dev stack (hot reload)
-├── Makefile                        # Developer shortcuts
-└── PROJECT_DOCS.md                 # This file
+├── design-system/
+│   └── MASTER.md                    # Design tokens, color palette, component specs
+├── docker-compose.yml               # Production stack
+├── docker-compose.dev.yml           # Dev stack (hot reload)
+└── CLAUDE.md                        # AI assistant instructions for this repo
 ```
 
 ---
 
-## 4. Backend Deep Dive
+## 5. Backend Deep Dive
 
-### 4.1 Entry Point & App Bootstrap
+### 5.1 Auth & Users
 
-**`app/main.py`**
+JWT-based authentication. All `/api/v1` endpoints (except `/auth/login` and `/auth/register`) require a `Bearer <token>` header, enforced by the `get_current_user` FastAPI dependency.
 
-```
-FastAPI()
-  ├── CORS middleware  →  allow origins: ["http://localhost:3000"]
-  ├── @app.on_event("startup")  →  init_db()   (creates tables if missing)
-  ├── include_router(sessions_router, prefix="/api/v1")
-  ├── include_router(voice_router,    prefix="/api/v1")
-  └── GET /api/v1/health  →  {"status": "ok"}
-```
-
-On startup, `init_db()` (in `db/database.py`) calls `Base.metadata.create_all()` asynchronously, which creates the SQLite file and all tables if they don't already exist. No migrations are needed for development.
-
----
-
-### 4.2 API Layer
-
-#### `app/api/sessions.py` — 5 endpoints
-
-| Method | Path | What it does |
-|--------|------|--------------|
-| `POST` | `/sessions/analyze` | Accepts multipart video file, runs full pipeline, returns `SessionResult` |
-| `GET` | `/sessions` | Returns list of `SessionSummary` objects (all sessions, newest first) |
-| `GET` | `/sessions/{id}` | Returns full `SessionResult` including exercise sets, errors, feedback, voice queries |
-| `DELETE` | `/sessions/{id}` | Hard-deletes session and all child rows (cascade) |
-
-**`POST /sessions/analyze` — internal steps:**
-```
-1. Save uploaded file to /tmp
-2. create_session() in DB  →  status = "processing"
-3. run_pipeline(video_path)
-     └── extract_frames()     (OpenCV)
-     └── detect_poses()       (MediaPipe)
-4. analyse_exercises(pose_frames)
-     └── RuleBasedAnalyser.dispatch()
-     └── Each exercise analyser runs independently
-5. build_feedback_context(results)
-6. generate_feedback(context)   →  Ollama llama3.2
-7. save_results() to DB         →  status = "completed"
-8. Return full SessionResult JSON
-```
-
-#### `app/api/voice.py`
-
-`POST /sessions/{id}/voice` accepts either:
-- `query_text` (string) — already transcribed
-- `audio_b64` (base64 WAV) — transcribed via Whisper first
-
-Then calls `answer_query(text, session_context)` on the LLM and optionally synthesizes the response to audio via pyttsx3.
-
----
-
-### 4.3 CV Pipeline
-
-#### `app/cv/frame_extractor.py`
-
-Uses **OpenCV** (`cv2.VideoCapture`) to open the video file and extract frames at a configurable interval (default: every Nth frame based on video FPS to target ~10 fps worth of pose data). Returns a list of numpy arrays (BGR images).
-
-```python
-def extract_frames(video_path: str, target_fps: int = 10) -> list[np.ndarray]:
-    cap = cv2.VideoCapture(video_path)
-    native_fps = cap.get(cv2.CAP_PROP_FPS)
-    step = max(1, int(native_fps / target_fps))
-    # reads every `step`-th frame, returns list of frames
-```
-
-#### `app/cv/pose_detector.py`
-
-Uses **MediaPipe Pose** (`mp.solutions.pose`) to detect 33 body landmarks on each frame. Each landmark has `(x, y, z, visibility)` normalized to frame dimensions.
-
-```python
-class PoseDetector:
-    def __init__(self):
-        self.pose = mp.solutions.pose.Pose(
-            static_image_mode=False,
-            model_complexity=1,
-            min_detection_confidence=0.5
-        )
-
-    def detect(self, frame: np.ndarray) -> PoseLandmarks | None:
-        # converts BGR → RGB, runs MediaPipe, returns landmark dict
-```
-
-Key landmarks used by the analyzers:
-
-| Landmark Index | Body Part |
-|---------------|-----------|
-| 11, 12 | Left/Right Shoulder |
-| 13, 14 | Left/Right Elbow |
-| 15, 16 | Left/Right Wrist |
-| 23, 24 | Left/Right Hip |
-| 25, 26 | Left/Right Knee |
-| 27, 28 | Left/Right Ankle |
-
-#### `app/cv/pipeline.py`
-
-Thin orchestrator that chains the two CV steps:
-
-```python
-def run_pipeline(video_path: str) -> list[PoseFrame]:
-    frames = extract_frames(video_path)
-    return detect_poses(frames)   # list of {frame_idx, landmarks, timestamp_ms}
-```
-
----
-
-### 4.4 Exercise Analysis
-
-#### `app/analysis/base.py` — Abstract Base
-
-```python
-class ExerciseAnalyser(ABC):
-    @abstractmethod
-    def analyse(self, pose_frames: list[PoseFrame]) -> ExerciseResult:
-        """
-        Takes a sequence of pose frames, returns:
-        - exercise_type: str
-        - rep_count: int
-        - correct_reps: int
-        - duration_s: float
-        - form_score: float  (0–100)
-        - posture_errors: list[PostureError]
-        """
-```
-
-#### `app/analysis/rule_based.py` — Dispatcher
-
-Detects which exercise is being performed by analysing the overall motion pattern across all frames (e.g., vertical vs. horizontal dominant movement, arm position relative to body), then delegates to the matching analyser.
-
-```python
-class RuleBasedAnalyser:
-    _registry = {
-        "squat":        SquatAnalyser,
-        "jumping_jack": JumpingJackAnalyser,
-        "bicep_curl":   BicepCurlAnalyser,
-        "lunge":        LungeAnalyser,
-        "plank":        PlankAnalyser,
-    }
-
-    def dispatch(self, pose_frames) -> list[ExerciseResult]:
-        exercise_type = self._classify(pose_frames)
-        analyser = self._registry[exercise_type]()
-        return [analyser.analyse(pose_frames)]
-```
-
-#### `app/analysis/exercises/` — Individual Analyzers
-
-Each analyser implements the same interface but with exercise-specific logic:
-
-**`squat.py`**
-- Tracks **knee angle** (hip → knee → ankle) over time
-- Rep counted when angle drops below threshold (flexion) then returns above (extension)
-- Form errors: `back_lean` (hip-to-shoulder angle), `knee_cave` (knee x vs ankle x), `shallow_squat` (insufficient depth)
-
-**`jumping_jack.py`**
-- Tracks **arm abduction** (wrist distance normalized to shoulder width) and **leg spread** (ankle distance normalized to hip width)
-- Rep counted on open → close cycle
-- Form errors: `arm_height` (wrists not above shoulders at top), `incomplete_spread` (legs not wide enough)
-
-**`bicep_curl.py`**
-- Tracks **elbow angle** (shoulder → elbow → wrist)
-- Rep counted on full extension → full flexion → extension cycle
-- Form errors: `shoulder_sway` (shoulder moves during curl), `incomplete_extension`, `incomplete_flexion`
-
-**`lunge.py`**
-- Detects forward step by tracking difference in knee heights and hip drop
-- Rep counted per alternating leg lunge
-- Form errors: `forward_lean`, `knee_over_toe` (front knee x past front ankle x)
-
-**`plank.py`**
-- No rep counting (isometric hold)
-- Measures **body alignment**: shoulder → hip → ankle should form a straight line
-- Form score based on deviation from straight line over time
-- Form errors: `hip_sag`, `hip_pike`
-
-#### `app/analysis/aggregator.py`
-
-Merges results from multiple exercises (if present) into a single session summary:
-
-```python
-def aggregate(results: list[ExerciseResult]) -> SessionSummary:
-    return SessionSummary(
-        total_reps      = sum(r.rep_count for r in results),
-        avg_form_score  = mean(r.form_score for r in results),
-        duration_s      = sum(r.duration_s for r in results),
-        exercise_types  = [r.exercise_type for r in results],
-    )
-```
-
----
-
-### 4.5 LLM Feedback
-
-**`app/feedback/llm.py`**
-
-Uses the official `ollama` Python client to call a locally running Ollama server.
-
-```python
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-MODEL       = os.getenv("OLLAMA_MODEL", "llama3.2")
-
-SYSTEM_PROMPT = """You are a professional fitness coach AI.
-Analyse workout data and provide clear, encouraging, and actionable coaching feedback.
-Keep responses concise (2-4 sentences per exercise). Be specific about form issues.
-Use simple, motivating language. Never be discouraging."""
-```
-
-**`generate_feedback(workout_context: str) → str`**
-- Called after analysis with a structured text block like:
-  ```
-  Exercise: Squat
-    Reps: 8 total, 8 correct form
-    Form Score: 85/100
-    Issues detected:
-      - back lean: 290 times (high severity)
-  ```
-- Returns the LLM's coaching text (2–4 sentences)
-- Typical response time: 2–5 seconds with llama3.2
-
-**`answer_query(query: str, session_context: str) → str`**
-- Used by the voice/chat endpoint
-- Includes full session data as context so the LLM can answer specific questions
-
----
-
-### 4.6 Voice (STT / TTS)
-
-**`app/voice/stt.py`** — Speech-to-Text
-
-Uses **OpenAI Whisper** (runs locally, no API key needed):
-
-```python
-import whisper
-model = whisper.load_model("base")  # ~74MB, loaded once on import
-
-def transcribe(audio_b64: str) -> str:
-    # decode base64 → temp WAV file → whisper.transcribe() → text
-```
-
-**`app/voice/tts.py`** — Text-to-Speech
-
-Uses **pyttsx3** (offline TTS engine):
-
-```python
-import pyttsx3
-
-def synthesize(text: str) -> str | None:
-    # renders text to a temp WAV file → reads bytes → returns base64
-    # returns None if synthesis fails (non-critical)
-```
-
----
-
-### 4.7 Database Layer
-
-**`app/db/database.py`** — Engine Setup
-
-```python
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/phva.db")
-
-engine = create_async_engine(DATABASE_URL, echo=False)
-AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
-
-async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-async def get_db() -> AsyncGenerator:
-    async with AsyncSessionLocal() as session:
-        yield session
-```
-
-The `get_db` function is used as a FastAPI dependency injection — every request gets its own DB session that is automatically closed when the request completes.
-
-**`app/db/crud.py`** — All database operations
-
-| Function | Description |
+| Endpoint | Description |
 |----------|-------------|
-| `create_session()` | Inserts new row, returns session UUID |
-| `update_session_status()` | Sets status to completed/failed |
-| `save_exercise_set()` | Saves rep/score data for one exercise |
-| `save_posture_errors()` | Bulk-saves error rows linked to exercise_set |
-| `save_ai_feedback()` | Saves LLM coaching text |
-| `save_voice_query()` | Saves user query + LLM response |
-| `list_sessions()` | Returns all sessions newest-first, with aggregate fields |
-| `get_session()` | Returns full session with all related rows (joined) |
-| `delete_session()` | Cascading delete of session + all children |
+| `POST /api/v1/auth/register` | Creates user + hashed password, returns JWT |
+| `POST /api/v1/auth/login` | Verifies credentials, returns JWT |
+| `GET  /api/v1/auth/me` | Returns current user info |
+| `GET/PUT /api/v1/profile` | User fitness profile (goal, level, equipment, injuries) |
+
+The profile drives both **plan generation** (LLM is given the profile as context) and future personalised coaching.
 
 ---
 
-## 5. Database Design
+### 5.2 Video Analysis Pipeline
 
-The database is a single **SQLite** file at `/app/data/phva.db` (mounted as a Docker volume for persistence). All tables use **UUID strings** as primary keys.
-
-### Entity Relationship Diagram
+`POST /api/v1/sessions/analyze` is the core endpoint. It accepts a multipart video file, runs the full pipeline as a **background task**, and returns immediately with `status="processing"`. The client polls `GET /sessions/{id}` until status is `completed` or `failed`.
 
 ```
-sessions
-  │   id (PK, UUID)
-  │   created_at
-  │   status           "processing" | "completed" | "failed"
-  │   duration_s
-  │
-  ├──< exercise_sets
-  │       id (PK, UUID)
-  │       session_id (FK → sessions.id)
-  │       exercise_type    "squat" | "jumping_jack" | "bicep_curl" | "lunge" | "plank"
-  │       rep_count
-  │       correct_reps
-  │       duration_s
-  │       form_score       0.0 – 100.0
-  │
-  │       └──< posture_errors
-  │               id (PK, UUID)
-  │               exercise_set_id (FK → exercise_sets.id)
-  │               error_type       e.g. "back_lean", "knee_cave"
-  │               occurrences      how many frames this error appeared
-  │               severity         "low" | "medium" | "high"
-  │
-  ├──< ai_feedback
-  │       id (PK, UUID)
-  │       session_id (FK → sessions.id)   ← one feedback per session
-  │       feedback_text
-  │       generated_at
-  │
-  └──< voice_queries
-          id (PK, UUID)
-          session_id (FK → sessions.id)
-          query_text
-          response_text
-          created_at
+Upload video
+    │
+    ├─ 1. create_session() → status = "processing"
+    │
+    ├─ 2. CV Pipeline (frame_extractor + pose_detector)
+    │       OpenCV samples frames at 10 fps
+    │       MediaPipe extracts 33 landmarks per frame
+    │
+    ├─ 3. BiLSTM Classifier
+    │       14-dim feature vector per frame
+    │       Predicts exercise type + confidence
+    │       Physics check validates prediction
+    │       Falls back to rule-based classifier if confidence < 0.40
+    │
+    ├─ 4. Rule-based Analyser (exercise-specific)
+    │       Counts reps via angle/position thresholds
+    │       Scores form per rep (0–100)
+    │       Detects posture errors per frame
+    │       Builds rep_scores[] array
+    │
+    ├─ 5. Aggregator
+    │       Merges results → session summary
+    │       Includes rep_scores[] per exercise set
+    │
+    ├─ 6. LLM Feedback (Ollama llama3.2)
+    │       Structured workout context → coaching text
+    │
+    ├─ 7. Persist to PostgreSQL
+    │       sessions, exercise_sets (+ rep_scores JSON),
+    │       posture_errors, ai_feedback
+    │       status = "completed"
+    │
+    └─ 8. Client polls GET /sessions/{id} → receives full result
 ```
-
-### SQLAlchemy Models (`app/db/models.py`)
-
-```python
-class Session(Base):
-    __tablename__ = "sessions"
-    id          = Column(String, primary_key=True, default=lambda: str(uuid4()))
-    created_at  = Column(DateTime, default=datetime.utcnow)
-    status      = Column(String, default="processing")
-    duration_s  = Column(Float, nullable=True)
-
-    exercise_sets = relationship("ExerciseSet", back_populates="session",
-                                 cascade="all, delete-orphan")
-    ai_feedback   = relationship("AIFeedback",  back_populates="session",
-                                 cascade="all, delete-orphan", uselist=False)
-    voice_queries = relationship("VoiceQuery",  back_populates="session",
-                                 cascade="all, delete-orphan")
-
-
-class ExerciseSet(Base):
-    __tablename__ = "exercise_sets"
-    id              = Column(String, primary_key=True, default=lambda: str(uuid4()))
-    session_id      = Column(String, ForeignKey("sessions.id"))
-    exercise_type   = Column(String)
-    rep_count       = Column(Integer)
-    correct_reps    = Column(Integer)
-    duration_s      = Column(Float)
-    form_score      = Column(Float)
-
-    posture_errors  = relationship("PostureError", back_populates="exercise_set",
-                                   cascade="all, delete-orphan")
-
-
-class PostureError(Base):
-    __tablename__ = "posture_errors"
-    id              = Column(String, primary_key=True, default=lambda: str(uuid4()))
-    exercise_set_id = Column(String, ForeignKey("exercise_sets.id"))
-    error_type      = Column(String)
-    occurrences     = Column(Integer)
-    severity        = Column(String)
-
-
-class AIFeedback(Base):
-    __tablename__ = "ai_feedback"
-    id            = Column(String, primary_key=True, default=lambda: str(uuid4()))
-    session_id    = Column(String, ForeignKey("sessions.id"))
-    feedback_text = Column(Text)
-    generated_at  = Column(DateTime, default=datetime.utcnow)
-
-
-class VoiceQuery(Base):
-    __tablename__ = "voice_queries"
-    id            = Column(String, primary_key=True, default=lambda: str(uuid4()))
-    session_id    = Column(String, ForeignKey("sessions.id"))
-    query_text    = Column(Text)
-    response_text = Column(Text)
-    created_at    = Column(DateTime, default=datetime.utcnow)
-```
-
-### Cascade Delete
-
-All child tables use `cascade="all, delete-orphan"` in SQLAlchemy and `ON DELETE CASCADE` at the DB level. Deleting a `Session` row automatically removes all linked `exercise_sets`, `posture_errors`, `ai_feedback`, and `voice_queries`.
 
 ---
 
-## 6. Full Request Flow — Video Analysis
+### 5.3 BiLSTM Exercise Classifier
 
-This is the most important flow in the system. Here is the complete path for `POST /api/v1/sessions/analyze`:
+A PyTorch Bidirectional LSTM that classifies exercise type from a sequence of pose frames. It replaces the older purely rule-based classification, giving higher accuracy and extensibility to new exercises without code changes.
+
+**Architecture:**
+```
+Input (batch, T, 14)  →  BiLSTM (hidden=128, layers=2, bidirectional)
+  →  Mean-pool over time  →  Linear(256→128) ReLU Dropout
+  →  Linear(128→N)  →  softmax  →  class + confidence
+```
+
+**14 Features per frame** (joint angles + spatial positions):
+- Knee, elbow, hip, shoulder angles (L+R, normalised to [0,1])
+- Arm spread, hip spread, torso inclination
+- Wrist position relative to hip
+
+**Physics validation** — after BiLSTM prediction, exercise-specific motion constraints are checked. If they fail (e.g. low knee ROM claimed as jumping jack), the system falls back to the rule-based classifier.
+
+**Training:**
+```bash
+# Synthetic data (default, no recordings needed)
+cd backend
+python -m app.analysis.train_bilstm
+
+# Mixed (recommended when you have real video clips)
+python -m app.analysis.train_bilstm --mode mixed --real-data-dir data/real/sequences
+
+# Evaluate
+python -m app.analysis.evaluate_bilstm
+```
+
+To add a new exercise: place video clips in `data/real/videos/<exercise_name>/`, reprocess, retrain. The class list is embedded in the weights file — no code changes required.
+
+---
+
+### 5.4 LLM Coaching (Ollama)
+
+All LLM calls go through `app/feedback/llm.py` using the `ollama` Python client pointed at a local Ollama instance (default: `http://localhost:11434`).
+
+**Three LLM use cases:**
+
+| Use case | Function | System prompt focus |
+|----------|----------|---------------------|
+| Post-workout feedback | `generate_feedback()` | Professional fitness coach, concise, encouraging |
+| Voice/chat queries | `answer_query()` | Session-aware Q&A, specific answers |
+| Plan generation | `_generate_plan_llm()` | JSON-only structured workout plan |
+
+Plan generation returns structured JSON matching the `WorkoutPlan` schema. Markdown code fences are stripped if present. If parsing fails, `_fallback_plan()` generates a profile-aware template.
+
+---
+
+### 5.5 Voice Assistant (STT / TTS)
+
+`POST /api/v1/sessions/{id}/voice` handles both text and audio input:
 
 ```
-Browser
+audio_b64 (base64 WAV)  →  Whisper STT  →  query_text
+                                              │
+query_text  ─────────────────────────────────┤
+                                              ▼
+                                    Ollama answer_query()
+                                              │
+                                              ▼
+                                    pyttsx3 TTS  →  audio_b64 (WAV)
+```
+
+Whisper runs locally (`base` model, ~74 MB). pyttsx3 uses the OS speech engine — no network calls. The voice query and response are persisted and shown in the session detail Q&A history.
+
+---
+
+### 5.6 Progress Tracking API
+
+`/api/v1/progress/` — all endpoints require auth, all scoped to the current user.
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /progress/summary` | Total sessions, reps, avg form score, sessions this week |
+| `GET /progress/form-trend` | Array of `{date, avg_score}` per session (last 30) |
+| `GET /progress/exercise-stats` | Per exercise: total reps, avg form, correct-rep % |
+| `GET /progress/weight` | Full weight log history (chronological) |
+| `POST /progress/weight` | Log a new weight entry `{weight_kg}` |
+
+---
+
+### 5.7 Workout Plans API
+
+`/api/v1/plans/` — LLM-generated and user-managed.
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /plans/generate` | Reads user profile → LLM → creates plan in DB |
+| `GET  /plans` | List all plans for current user |
+| `GET  /plans/{id}` | Full plan with all exercises |
+| `PATCH /plans/{id}/exercises/{ex_id}/toggle` | Mark exercise complete / incomplete |
+| `DELETE /plans/{id}` | Delete plan |
+
+Plan exercises have `day_of_week` (0=Mon … 6=Sun), `sets_target`, `reps_target`, `duration_target_s`, and `completed_at`.
+
+---
+
+### 5.8 Database Layer
+
+Async SQLAlchemy 2.0 with **PostgreSQL 16** via `asyncpg`. All operations go through `app/db/crud.py`. Schema changes are managed by Alembic migrations.
+
+```bash
+# Apply all migrations
+cd backend && alembic upgrade head
+
+# Create a new migration
+alembic revision --autogenerate -m "description"
+```
+
+---
+
+## 6. Database Schema
+
+```
+users
+  id · email · hashed_password · created_at
+  └──< profiles
+        user_id · primary_goal · fitness_level · equipment
+        activity_level · weekly_workout_target · injuries · weight_kg
+
+users
+  └──< sessions
+        id · user_id · created_at · status · duration_s
+        │
+        └──< exercise_sets
+        │     id · session_id · exercise_type · rep_count · correct_reps
+        │     duration_s · form_score · rep_scores (JSON [float])
+        │     └──< posture_errors
+        │           id · exercise_set_id · error_type · occurrences · severity
+        │
+        ├──< ai_feedback
+        │     id · session_id · feedback_text · generated_at
+        │
+        └──< voice_queries
+              id · session_id · query_text · response_text · created_at
+
+users
+  ├──< weight_logs
+  │     id · user_id · weight_kg · logged_at
   │
-  │  multipart/form-data  video=<file>
+  └──< workout_plans
+        id · user_id · title · description · duration_weeks · created_at
+        └──< plan_exercises
+              id · plan_id · day_of_week · exercise_type
+              sets_target · reps_target · duration_target_s · notes · completed_at
+```
+
+All cascade deletes are set at both the SQLAlchemy relationship level (`cascade="all, delete-orphan"`) and the DB level (`ON DELETE CASCADE`).
+
+---
+
+## 7. Flutter App Deep Dive
+
+Single Dart codebase targeting **iOS, Android, and Web**. The web build is served by Nginx as a SPA (single-page app).
+
+### 7.1 Navigation & Shell
+
+**GoRouter** handles all routing with an auth redirect guard:
+- Unauthenticated → redirects to `/login`
+- Authenticated on `/login` → redirects to `/`
+
+A **ShellRoute** wraps all authenticated screens with `AppShell`, which adapts the layout:
+- **≥ 768 px (web/tablet):** 240px collapsible sidebar (`SideNav`)
+- **< 768 px (mobile):** content + bottom navigation bar (`BottomNav`)
+
+**Routes:**
+
+| Path | Screen |
+|------|--------|
+| `/login` | LoginScreen |
+| `/` | HomeScreen |
+| `/analyze` | AnalyzeScreen |
+| `/history` | HistoryScreen |
+| `/sessions/:id` | SessionDetailScreen |
+| `/progress` | ProgressScreen |
+| `/plans` | PlansScreen |
+| `/plans/:id` | PlanDetailScreen |
+| `/library` | LibraryScreen |
+| `/assistant` | AssistantScreen |
+| `/settings` | SettingsScreen |
+| `/profile/edit` | EditProfileScreen |
+
+---
+
+### 7.2 Screens
+
+**HomeScreen** — KPI cards (sessions this week, total reps, avg form), last 3 session cards with form score ring, quick upload shortcut.
+
+**AnalyzeScreen** — Platform-adaptive picker (camera on mobile, file picker on web), upload with progress steps (Uploading → Processing → Analyzing → Generating feedback), polls every 2s, shows full result on completion.
+
+**HistoryScreen** — Paginated session list with form score bar, swipe-to-delete with confirmation bottom sheet.
+
+**SessionDetailScreen** — Date/time header, stat cards (reps / form score / duration), expandable `ExerciseCard` per set (rep chart + posture errors), AI coaching panel, Q&A history, share button.
+
+**ProgressScreen** — Summary KPIs, weight log input + line chart (fl_chart), form score trend line chart, exercise stat rows with dual progress bars (form score + correct-rep accuracy).
+
+**PlansScreen** — List of generated plans with week count and exercise count, "Generate AI Plan" action button. Tapping a plan opens `PlanDetailScreen`.
+
+**PlanDetailScreen** — Day-by-day schedule (Mon–Sun). Each exercise row shows sets × reps target and taps to toggle completion (animated circle checkbox). Progress bar shows week completion %.
+
+**LibraryScreen** — Category filter chips (All / Legs / Arms / Cardio / Core), expandable exercise cards showing description, muscles, form cues (green), and common mistakes (red).
+
+**AssistantScreen** — Session selector, chat bubbles (user right / AI left), text input + send, voice recording button, suggested question chips, audio playback for TTS responses.
+
+---
+
+### 7.3 State Management
+
+All state managed with **Riverpod** (`flutter_riverpod`).
+
+| Provider type | Used for |
+|---------------|----------|
+| `FutureProvider` | Single async data fetch (session, plan, progress summary) |
+| `FutureProvider.family` | Parameterised async fetch (session by ID, plan by ID) |
+| `StateNotifierProvider` | Mutable state with actions (auth, analyze, voice recording, plan generation, weight logging) |
+| `StateProvider` | Simple toggle state (sidebar expanded, theme mode) |
+
+Providers are invalidated after mutations to trigger re-fetch:
+```dart
+ref.invalidate(plansProvider);          // after generate / delete
+ref.invalidate(weightHistoryProvider);  // after log weight
+ref.invalidate(sessionResultProvider(id)); // after delete
+```
+
+---
+
+### 7.4 API Client
+
+`core/api/client.dart` — Dio singleton configured with:
+- Base URL from `flutter_secure_storage` (user-configurable in Settings)
+- `Authorization: Bearer <token>` interceptor (reads token from secure storage)
+- 30s connection timeout
+
+`core/api/api_service.dart` — Typed wrapper methods for every backend endpoint. Returns Dart model objects (never raw JSON in the UI layer).
+
+Token and server URL are stored in `flutter_secure_storage` — encrypted on-device, survives app restarts.
+
+---
+
+### 7.5 Design System
+
+Defined in `design-system/MASTER.md`, implemented in `core/theme/app_theme.dart`.
+
+**Dark theme (default):**
+
+| Token | Color | Usage |
+|-------|-------|-------|
+| Background | `#0A0A0F` | Scaffold background |
+| Surface | `#111118` | Cards, nav |
+| Primary | `#6366F1` | CTAs, active nav, charts |
+| Health / Success | `#10B981` | Good form, rep quality ≥ 80% |
+| Warning | `#F59E0B` | Moderate form (50–79%) |
+| Error | `#EF4444` | Poor form (< 50%), high severity errors |
+| Text primary | `#F1F5F9` | Body text |
+| Text muted | `#94A3B8` | Labels, secondary text |
+| Border | `rgba(255,255,255,0.07)` | Card borders, dividers |
+| Font | Inter (Google Fonts) | All text |
+
+Both `AppTheme.dark` and `AppTheme.light` are defined; the active theme is persisted and toggled from Settings.
+
+---
+
+## 8. Full Request Flows
+
+### Video Analysis (async polling)
+
+```
+Flutter AnalyzeScreen
+  │  POST /sessions/analyze  (multipart video)
   ▼
-FastAPI  sessions.py::analyze_video()
+FastAPI → create DB row (status=processing) → start BackgroundTask → return {id, status}
   │
-  ├─ 1. Save video to temp file  (/tmp/<uuid>.mp4)
+  └─ BackgroundTask:
+       CV Pipeline → BiLSTM classify → Rule analyser → Aggregate
+       → Ollama feedback → save all to DB → status=completed
+
+Flutter (polls every 2s)
+  │  GET /sessions/{id}
+  ▼
+  status=processing  →  keep polling
+  status=completed   →  cancel timer, show results
+```
+
+### AI Plan Generation
+
+```
+Flutter PlansScreen  →  tap "Generate AI Plan"
+  │  POST /plans/generate
+  ▼
+FastAPI → load user profile from DB
   │
-  ├─ 2. DB: create_session()
-  │       sessions.status = "processing"
+  └─ Ollama prompt:
+       System: JSON-only workout plan format
+       User: profile (goal, level, equipment, injuries, target days/week)
+       → parse JSON response (strip markdown fences)
+       → fallback to template if parse fails
   │
-  ├─ 3. CV: run_pipeline(video_path)
-  │       ├─ frame_extractor.extract_frames()
-  │       │     OpenCV reads video, samples every Nth frame
-  │       │     Returns: list[np.ndarray]  (BGR images)
-  │       │
-  │       └─ pose_detector.detect_poses()
-  │             MediaPipe Pose runs on each frame
-  │             Returns: list[PoseFrame]
-  │               {frame_idx, timestamp_ms, landmarks: {0..32: {x,y,z,vis}}}
-  │
-  ├─ 4. Analysis: RuleBasedAnalyser.dispatch(pose_frames)
-  │       ├─ _classify(): examines motion patterns to ID exercise
-  │       └─ ExerciseAnalyser.analyse(pose_frames)
-  │             Counts reps via angle/position thresholds
-  │             Scores form per rep
-  │             Detects posture errors per frame
-  │             Returns: ExerciseResult
-  │               {exercise_type, rep_count, correct_reps,
-  │                duration_s, form_score, posture_errors[]}
-  │
-  ├─ 5. Build feedback context (structured text summary)
-  │
-  ├─ 6. LLM: generate_feedback(context)
-  │       Ollama client → POST http://host.docker.internal:11434/api/chat
-  │       Model: llama3.2
-  │       Returns: coaching text string
-  │
-  ├─ 7. DB: save all results
-  │       save_exercise_set()    → exercise_sets row
-  │       save_posture_errors()  → posture_errors rows (bulk)
-  │       save_ai_feedback()     → ai_feedback row
-  │       update_session_status("completed")
-  │
-  └─ 8. Return SessionResult JSON
-          {id, created_at, status, exercise_sets[], ai_feedback, voice_queries[]}
+  └─ Save plan + exercises to DB → return serialized plan
+
+Flutter → invalidate plansProvider → list refreshes with new plan
+```
+
+### Voice Query
+
+```
+Flutter AssistantScreen  →  record audio  →  base64 encode
+  │  POST /sessions/{id}/voice  {audio_b64: "..."}
+  ▼
+FastAPI
+  ├─ Whisper STT: base64 WAV → transcript text
+  ├─ Load session context from DB
+  ├─ Ollama: answer_query(transcript, session_context) → response_text
+  ├─ pyttsx3 TTS: response_text → WAV bytes → base64
+  ├─ Save VoiceQuery row
+  └─ Return {query_text, response_text, audio_b64}
+
+Flutter → append to conversation list → play audio response
 ```
 
 ---
 
-## 7. Frontend Deep Dive
+## 9. Environment & Configuration
 
-### 7.1 Pages
-
-All pages live under `src/app/` following Next.js 14 App Router conventions.
-
-| Page | File | Type | Description |
-|------|------|------|-------------|
-| Dashboard | `app/page.tsx` | Client | Stats, trend chart, exercise breakdown, recent sessions. Fetches on mount. |
-| Analyze | `app/analyze/page.tsx` | Client | Upload zone → progress animation → results + AI feedback. Calls `router.refresh()` on completion. |
-| History | `app/history/page.tsx` | Client | Sortable session list with delete (confirmation modal). Fetches on mount. |
-| AI Coach | `app/assistant/page.tsx` | Client | Chat interface. Shows session picker when no session selected. Supports voice (WebAudio API → Whisper). |
-| Session Detail | `app/session/[id]/page.tsx` | Server | Full session breakdown: per-exercise cards, posture errors, AI feedback, past voice queries. |
-
-> **Why client components for Dashboard/History?**
-> Next.js 14.x caches SSR pages in the router cache (~30s) even with `force-dynamic`. Converting to client components that fetch in `useEffect` bypasses this cache completely, ensuring always-fresh data on navigation.
-
-### 7.2 Components
-
-#### Layout
-- **`Sidebar.tsx`** — Fixed 240px sidebar with nav links and a Settings button that opens a modal (theme toggle). Uses `useTheme()` hook.
-- **`Header.tsx`** — Top bar showing current page title (derived from `usePathname()`).
-
-#### Dashboard
-- **`StatCard.tsx`** — Metric card with icon, label, value, optional delta indicator.
-- **`FormTrendChart.tsx`** — Recharts `AreaChart` showing form score trend across last 10 sessions.
-- **`ExerciseBreakdown.tsx`** — Recharts `RadialBarChart` showing proportion of each exercise type.
-- **`RecentSessions.tsx`** — List of last 6 sessions with score badge and link to detail.
-- **`QuickUpload.tsx`** — Shortcut card linking to `/analyze`.
-
-#### Analyze
-- **`VideoUploader.tsx`** — Drag-and-drop zone with file validation (`video/*` only).
-- **`AnalysisProgress.tsx`** — 4-step progress indicator (Extracting → Detecting → Analysing → Generating feedback).
-- **`ExerciseCard.tsx`** — Collapsible card showing rep count, form score, duration. Contains `RepChart` and `PostureErrorList`.
-- **`RepChart.tsx`** — Bar chart of per-rep form scores (green/yellow/red by threshold).
-- **`PostureErrorList.tsx`** — Error list with severity badges.
-- **`AIFeedbackPanel.tsx`** — Displays LLM coaching text.
-
-#### Assistant
-- **`MessageBubble.tsx`** — Chat bubble (right-aligned for user, left for assistant). Includes audio player for TTS responses.
-- **`SuggestionChips.tsx`** — 4 quick-start question buttons shown when session is loaded.
-
-### 7.3 API Client & Types
-
-**`src/lib/api.ts`**
-
-Single typed fetch wrapper. Automatically switches base URL between:
-- Server-side (SSR/RSC): `http://backend:8000` (Docker internal hostname)
-- Client-side (browser): `http://localhost:8000`
-
-```typescript
-const BASE =
-  typeof window === "undefined"
-    ? (process.env.API_URL ?? "http://localhost:8000")
-    : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000");
-
-export const api = {
-  analyzeVideo(file: File): Promise<SessionResult>
-  listSessions(): Promise<SessionSummary[]>
-  getSession(id: string): Promise<SessionResult>
-  deleteSession(id: string): Promise<void>
-  voiceQuery(sessionId: string, body: VoiceQueryRequest): Promise<VoiceQueryResponse>
-}
-```
-
-**`src/lib/types.ts`**
-
-All TypeScript interfaces that mirror the backend Pydantic schemas:
-
-```typescript
-ExerciseType = "squat" | "jumping_jack" | "bicep_curl" | "lunge" | "plank"
-
-PostureError   { id, error_type, occurrences, severity }
-ExerciseSet    { id, exercise_type, rep_count, correct_reps, duration_s, form_score, posture_errors[] }
-AIFeedback     { feedback_text, generated_at }
-VoiceQuery     { id, query_text, response_text, created_at }
-SessionSummary { id, created_at, duration_s, status, total_reps, avg_form_score, exercise_types[] }
-SessionResult  { id, created_at, duration_s, status, exercise_sets[], ai_feedback, voice_queries[] }
-```
-
-### 7.4 Theme System
-
-The app supports **dark** (default) and **light** themes, persisted in `localStorage`.
-
-**How it works:**
-
-1. **CSS variables** in `globals.css` define two palettes on `:root` (dark) and `.light` (light):
-   ```css
-   :root { --color-bg: 10 10 15; --color-surface: 17 17 24; ... }
-   .light { --color-bg: 243 244 246; --color-surface: 255 255 255; ... }
-   ```
-
-2. **Tailwind config** references these variables with `<alpha-value>` support:
-   ```ts
-   bg: "rgb(var(--color-bg) / <alpha-value>)"
-   ```
-   This means every Tailwind utility like `bg-surface-2/60` or `text-text-primary` responds to the active theme automatically.
-
-3. **`ThemeContext`** (`src/contexts/ThemeContext.tsx`) reads `localStorage` on mount and toggles the `light` class on `<html>`.
-
-4. **Anti-flash script** in `layout.tsx` runs synchronously before React hydration to apply the saved theme class before the first paint, preventing a flash of the wrong theme.
-
----
-
-## 8. Environment & Configuration
-
-### Backend Environment Variables
+### Backend
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `DATABASE_URL` | — | PostgreSQL async URL (`postgresql+asyncpg://...`) |
+| `SECRET_KEY` | — | JWT signing key (required in production) |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL |
-| `OLLAMA_MODEL` | `llama3.2` | Model to use for feedback and queries |
-| `DATABASE_URL` | `sqlite+aiosqlite:///./data/phva.db` | SQLAlchemy async DB URL |
+| `OLLAMA_MODEL` | `llama3.2` | Model for all LLM calls |
+| `ALLOWED_ORIGINS` | `http://localhost` | CORS allowed origins |
+| `ANALYZE_RATE_LIMIT` | `10/minute` | Rate limit per IP for `/analyze` |
 
-### Frontend Environment Variables
+### Flutter App
 
-| Variable | Used by | Description |
-|----------|---------|-------------|
-| `API_URL` | SSR (server-side) | Backend URL from inside Docker network |
-| `NEXT_PUBLIC_API_URL` | Client-side (browser) | Backend URL accessible from browser |
-
-In Docker Compose, `API_URL=http://backend:8000` (service name) and `NEXT_PUBLIC_API_URL=http://localhost:8000` (host-mapped port).
+The server URL is stored in device secure storage and set from the Settings screen — no build-time env vars needed. Default is `http://localhost:8000` (overridden in Docker to the Nginx proxy URL).
 
 ---
 
-## 9. Docker Setup
+## 10. Docker Setup
 
-### Production (`docker-compose.yml`)
-
-```
-services:
-  backend   → builds ./backend, port 8000, mounts sqlite_data volume
-  frontend  → builds ./frontend, port 3000
-  (Ollama runs on host, accessed via host.docker.internal:11434)
-
-volumes:
-  sqlite_data  → persists /app/data/phva.db across container restarts
-```
-
-### Development (`docker-compose.dev.yml`)
-
-Same services but with source code mounted as volumes + hot-reload commands:
-- Backend: `uvicorn app.main:app --reload`
-- Frontend: `npm run dev`
-
-### Makefile shortcuts
+### Development
 
 ```bash
-make dev              # Start dev stack (also starts Ollama via pwsh script)
-make up               # Start production stack
-make down             # Stop all services
-make logs             # Tail all logs
-make logs-back        # Backend logs only
-make health           # Check backend + Ollama status
-make restart-backend  # Restart backend container only
-make clean            # Remove containers and images
+docker-compose -f docker-compose.dev.yml up
+```
+
+- Backend mounted as volume with `--reload` (hot reload on file changes)
+- PostgreSQL with persistent volume
+- Ollama must be running on the host machine at port 11434
+
+Run migrations after first start:
+```bash
+docker exec phva-backend-dev alembic upgrade head
+```
+
+Flutter app runs locally (not containerized in dev):
+```bash
+cd app
+flutter pub get
+flutter run -d chrome       # web
+flutter run -d ios          # iOS simulator
+flutter run -d android      # Android emulator
+```
+
+### Production
+
+```bash
+# Requires .env with POSTGRES_PASSWORD and SECRET_KEY
+docker-compose up --build
+docker exec <backend-container> alembic upgrade head
+```
+
+Production stack adds Nginx as a reverse proxy: `/api/` → `backend:8000`, `/` → Flutter web build served as SPA.
+
+**Build Flutter web for production:**
+```bash
+cd app && flutter build web --release
+# Output in app/build/web/ — copy into Nginx static root
 ```
 
 ---
 
-## 10. Key Design Decisions
+## 11. Development Commands
 
-### Why SQLite instead of PostgreSQL?
-Single-user local app. SQLite requires zero setup, runs embedded in the backend container, and is sufficient for the data volume. The async driver (`aiosqlite`) keeps it non-blocking.
+### Backend
 
-### Why Ollama instead of a cloud LLM API?
-Privacy — workout data never leaves the machine. Ollama runs llama3.2 locally with no API key, no latency from external calls, and no cost.
+```bash
+cd backend
 
-### Why rule-based exercise analysis instead of an ML classifier?
-MediaPipe already gives clean landmark coordinates. Computing joint angles from landmarks is deterministic, explainable, and fast. An ML classifier would need labelled training data and a model file. The rule-based approach gives identical accuracy for the supported exercise set with far less complexity.
+# Install dependencies
+pip install -r requirements.txt
 
-### Why client-side data fetching for Dashboard and History?
-Next.js 14's router cache caches pages for ~30s even with `force-dynamic`, causing stale data on client navigation. Client components fetching in `useEffect` bypass the router cache entirely — the data is always fresh on every page visit.
+# Run dev server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-### Why UUID primary keys?
-Avoids sequential ID enumeration in URLs and makes the system safe to expose (session IDs in the URL aren't guessable).
+# Migrations
+alembic upgrade head
+alembic revision --autogenerate -m "description"
+
+# Tests (72 passed, 1 xfailed)
+pip install -r requirements-dev.txt
+python -m pytest tests/ -v
+python -m pytest tests/ --cov=app/analysis --cov-report=term-missing
+
+# Train BiLSTM
+python -m app.analysis.train_bilstm                           # synthetic
+python -m app.analysis.train_bilstm --mode mixed              # real + synthetic
+python -m app.analysis.evaluate_bilstm                        # eval report
+```
+
+### Flutter
+
+```bash
+cd app
+
+flutter pub get                    # install packages
+flutter run -d chrome              # web (dev)
+flutter run -d ios                 # iOS simulator
+flutter run -d android             # Android emulator
+flutter build web --release        # production web build
+flutter analyze                    # lint
+```
+
+---
+
+## 12. Design Decisions
+
+### PostgreSQL over SQLite
+Multi-user support (subscription model) requires concurrent writes, proper row-level locking, and JSON column support for `rep_scores`. PostgreSQL handles all of this natively. Alembic manages schema evolution.
+
+### Flutter over separate web/mobile codebases
+Single Dart codebase targets iOS, Android, and web. No duplicated logic, one design system, one state management pattern. The adaptive shell (sidebar vs bottom nav) handles layout differences.
+
+### Local-first LLM (Ollama)
+All AI processing — coaching feedback, plan generation, voice queries — runs on a local Ollama instance. No data leaves the user's machine, no API keys, no per-call cost. This is a key differentiator for privacy-sensitive healthcare and fitness use cases.
+
+### BiLSTM over pure rule-based classification
+Rule-based classification works well for known exercises but can't be extended without new code. The BiLSTM embeds the class list in the weights file — adding a new exercise requires only recording video clips and retraining, no code changes. Dynamic class discovery enables the subscription model to offer exercise-specific tiers.
+
+### Async video analysis with polling
+MediaPipe + BiLSTM + Ollama can take 5–30 seconds. Running synchronously would block the HTTP connection and hit proxy timeouts. The background task pattern (`BackgroundTasks` in FastAPI) returns immediately with a processing ID and lets the client poll — better UX and compatible with any timeout-sensitive reverse proxy.
+
+### Rate limiting on `/analyze`
+The analysis endpoint is CPU/GPU intensive. `slowapi` rate limiting (10 req/min per IP by default, configurable) prevents abuse while keeping the API open for normal use. This is essential for the subscription model — free-tier limits can be enforced here.
+
+### Per-rep scores in the database
+`rep_scores` is stored as a JSON array on `exercise_sets`, not as individual rows. The array is small (≤ 30 floats typically), queried always alongside its parent row, and never filtered individually — a JSON column is simpler and faster than a separate `rep_score_items` table.
