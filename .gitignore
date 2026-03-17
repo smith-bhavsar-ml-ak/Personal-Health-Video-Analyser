@@ -23,6 +23,9 @@ env/
 !backend/data/.gitkeep
 !backend/experiments/.gitkeep
 
+# ── Real video training data (large files, not committed) ─────────────────────
+backend/data/real/
+
 # ── Node / Next.js ────────────────────────────────────────────────────────────
 node_modules/
 frontend/.next/

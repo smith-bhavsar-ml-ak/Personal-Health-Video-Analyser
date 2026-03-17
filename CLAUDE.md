@@ -13,25 +13,35 @@ Video Upload → CV Pipeline → Exercise Analysis → LLM Feedback → Database
 ```
 
 **Backend (Python/FastAPI)** at `backend/`
-- `app/main.py` — FastAPI entry point, CORS, DB init on startup
+- `app/main.py` — FastAPI entry point, CORS, JSON structured logging, rate limiter, DB init on startup
 - `app/api/` — Routes: `sessions.py` (analyze, list, get, delete), `voice.py` (STT/TTS queries)
+- `app/core/limiter.py` — `slowapi` rate limiter (key: remote IP)
 - `app/cv/` — Computer vision: `frame_extractor.py` → `pose_detector.py` → `pipeline.py`
+  - `pipeline.py` exposes `run_cv_pipeline_from_bytes(content, filename)` — used by background tasks
 - `app/analysis/` — Exercise analysis: `base.py` (abstract `ExerciseAnalyser`), `rule_based.py` (dispatcher), `exercises/` (squat, jumping_jack, bicep_curl, lunge, plank analyzers), `aggregator.py`
-  - `bilstm_model.py` — PyTorch BiLSTM architecture (see BiLSTM section below)
-  - `bilstm_analyser.py` — Drop-in `run_analysis()` using BiLSTM + physics checks + rule-based fallback
+  - `bilstm_model.py` — PyTorch BiLSTM architecture; `CLASSES` kept as default fallback only
+  - `bilstm_analyser.py` — Drop-in `run_analysis()` using BiLSTM + dict-based physics checks + graceful ANALYSERS fallback for dynamic classes
   - `features.py` — Extracts 14-dim float32 feature vector per PoseFrame
-  - `train_bilstm.py` — Synthetic data generators + training loop; saves weights to `weights/bilstm_classifier.pt`
-  - `evaluate_bilstm.py` — Standalone eval report: accuracy, noise robustness, speed (`python -m app.analysis.evaluate_bilstm`)
+  - `train_bilstm.py` — Synthetic generators + augmentation + training loop; supports `--mode synthetic|real|mixed`
+  - `preprocess_real_data.py` — Extracts labeled `.npy` sequences from real exercise videos
+  - `evaluate_bilstm.py` — Standalone eval report: accuracy, noise robustness, speed
 - `app/feedback/llm.py` — Ollama (llama3.2) integration for coaching feedback
 - `app/voice/stt.py` — Whisper transcription; `voice/tts.py` — pyttsx3 TTS
-- `app/db/` — Async SQLAlchemy with SQLite: `models.py`, `crud.py`, `database.py`
+- `app/db/` — Async SQLAlchemy with PostgreSQL (asyncpg): `models.py`, `crud.py`, `database.py`
+- `alembic/` — Database migrations (async-compatible); run via `alembic upgrade head`
 
 **Frontend (Next.js 14 / TypeScript)** at `frontend/`
 - `src/app/` — App Router pages: `/` (dashboard), `/analyze`, `/history`, `/assistant`, `/session/[id]`
+  - `analyze/page.tsx` — polls `getSession(id)` every 2s while `status === "processing"`
 - `src/components/` — React components organized by page
 - `src/lib/api.ts` — Typed fetch wrapper; `lib/types.ts` — shared TypeScript interfaces
+  - `ExerciseType = string` (open type — backend drives the class list)
+  - Use `getExerciseLabel(type)` / `getExerciseColor(type)` helpers for display; they handle unknown dynamic classes
 
-**External dependency:** Ollama must be running locally on port 11434.
+**Infrastructure**
+- **Nginx** — reverse proxy: `/api/` → `backend:8000`, `/` → `frontend:3000`; `client_max_body_size 200M`
+- **PostgreSQL 16** — primary database (replaces SQLite)
+- **Ollama** — must be running locally on port 11434
 
 ## Commands
 
@@ -42,6 +52,9 @@ pip install -r backend/requirements.txt
 
 # Run (dev with hot reload)
 cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Run database migrations
+cd backend && alembic upgrade head
 
 # API docs
 open http://localhost:8000/docs
@@ -62,9 +75,16 @@ npm run lint     # ESLint
 # Development (hot reload)
 docker-compose -f docker-compose.dev.yml up
 
-# Production
+# Production (requires .env with POSTGRES_PASSWORD, SECRET_KEY)
 docker-compose up
 ```
+
+**Required env vars for production (`docker-compose.yml`):**
+- `POSTGRES_PASSWORD` — PostgreSQL password (no default, fails loud)
+- `SECRET_KEY` — app secret key (no default, fails loud)
+- `OLLAMA_HOST` — Ollama URL (default: `http://host.docker.internal:11434`)
+- `ALLOWED_ORIGINS` — CORS origins (default: `http://localhost`)
+- `NEXT_PUBLIC_API_URL` — baked into frontend build (default: `http://localhost`)
 
 ## Design System
 
@@ -81,12 +101,16 @@ Page-specific design specs are in `design-system/pages/`.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/sessions/analyze` | Upload video, run full analysis pipeline |
+| POST | `/api/v1/sessions/analyze` | Upload video — returns immediately with `status="processing"` |
 | GET | `/api/v1/sessions` | List all sessions |
-| GET | `/api/v1/sessions/{id}` | Session details with exercise sets and feedback |
+| GET | `/api/v1/sessions/{id}` | Session details (poll until `status` is `completed` or `failed`) |
 | DELETE | `/api/v1/sessions/{id}` | Delete session |
 | POST | `/api/v1/sessions/{id}/voice` | Voice query on a session |
 | GET | `/api/v1/health` | Health check |
+
+**`/analyze` is rate-limited** (default: 10/minute per IP, configurable via `ANALYZE_RATE_LIMIT` env var).
+
+**`/analyze` is async** — the heavy CV + ML work runs in a `BackgroundTask`. Poll `GET /sessions/{id}` until `status != "processing"`.
 
 ## BiLSTM Exercise Classifier
 
@@ -105,12 +129,14 @@ Mean-pool over time  →  (batch, 256)
 Linear(256 → 128) → ReLU → Dropout(0.3)
     │
     ▼
-Linear(128 → 5)  →  logits  (one per class)
+Linear(128 → N)  →  logits  (N = number of classes, embedded in weights)
 ```
 
-- **Classes** (in order): `squat`, `jumping_jack`, `bicep_curl`, `lunge`, `plank`
-- **Parameters**: ~576k
+- **Default classes** (original 5): `squat`, `jumping_jack`, `bicep_curl`, `lunge`, `plank`
+- **Dynamic classes**: class list is embedded in the weights checkpoint — adding new exercises requires only retraining, no code changes
+- **Parameters**: ~576k (5 classes); scales with `num_classes`
 - **Weights file**: `backend/app/analysis/weights/bilstm_classifier.pt`
+- **Weights format**: `{'state_dict': ..., 'classes': [...]}` (backward-compat: plain state_dict still works)
 
 ### 14 Feature Vector (per frame)
 
@@ -148,55 +174,66 @@ BiLSTM forward pass  →  softmax probs  →  predicted class + confidence
     │                                               ▼
     ├─ _physics_check() fails  ─────────────►  rule_based.detect_exercise_type()
     │
+    ├─ exercise not in ANALYSERS (dynamic class)  →  _minimal_result() [rep_count=0]
+    │
     ▼
-return BiLSTM prediction
+return BiLSTM prediction + rule-based analyser result
 ```
 
-**Physics constraints** (hard overrides in `bilstm_analyser._physics_check`):
+**Physics constraints** — dict-based in `bilstm_analyser.PHYSICS_CONSTRAINTS`; exercises with no entry always pass:
 - `jumping_jack`: knee_range ≤ 0.10 AND knee_min ≥ 0.85 AND wrist_max ≥ 0.10
 - `plank`: knee_range ≤ 0.15 AND elbow_range ≤ 0.20
 - `bicep_curl`: elbow_range ≥ 0.15 AND knee_range ≤ 0.15
-- `squat`, `lunge`: no physics constraints (rule-based handles edge cases)
+- `squat`, `lunge`, new exercises: no constraint (always pass physics check)
 
 ### Training
 
-**Current state:** Trained on synthetic data only. The synthetic generators in `train_bilstm.py` produce realistic 2D-projected MediaPipe angles (e.g. squat knee at 130–148° front-view, not the idealized 3D ~80°). Physics checks exist as a safety net to catch domain-gap errors on real video.
+**Current state:** Trained on augmented synthetic data. Achieves ~99–100% on synthetic test data.
+Expected accuracy on real video: ~80–85% (domain gap reduced by augmentation).
 
-**To retrain:**
+**To retrain (synthetic):**
 ```bash
 cd backend
-python -m app.analysis.train_bilstm          # saves weights/bilstm_classifier.pt
-python -m app.analysis.evaluate_bilstm       # generates eval_report.txt
-# If running in Docker:
-docker cp app/analysis/weights/bilstm_classifier.pt <container>:/app/app/analysis/weights/
+python -m app.analysis.train_bilstm                    # synthetic + augmentation (default)
+python -m app.analysis.evaluate_bilstm                 # generates eval_report.txt
 ```
 
-**To train on real video data (recommended when available):**
+**To train on real video data (recommended for best accuracy):**
+```bash
+# 1. Record 2–3 clips per exercise (~20s each), one exercise per clip.
+#    Place in: data/real/videos/<label>/clip_01.mp4
+#    The subdirectory name becomes the class label — no code changes needed.
 
-1. Record 10–15 clips per exercise (~20–30 sec each), one exercise per clip.
-   Name files: `data/real/squat_01.mp4`, `squat_02.mp4`, `jumping_jack_01.mp4`, etc.
+# 2. Extract sequences (discovers classes from directory names)
+cd backend
+python -m app.analysis.preprocess_real_data \
+    --data-dir data/real/videos \
+    --out-dir  data/real/sequences
 
-2. Run the preprocessing script (to be written) which:
-   - Passes each clip through the existing CV pipeline (`pipeline.py`)
-   - Calls `extract_sequence_features()` on sliding 60-frame windows (stride 15)
-   - Saves labeled numpy arrays to `data/real/sequences/<label>_<n>.npy`
+# 3. Train (mixed = real + synthetic fill, recommended)
+python -m app.analysis.train_bilstm --mode mixed --real-data-dir data/real/sequences
 
-3. Update `train_bilstm.py` to load real sequences (or mix real + synthetic):
-   ```python
-   # Replace or augment synthetic generators with:
-   real_seqs = load_real_sequences("data/real/sequences/")
-   # Mix: e.g. 80% real + 20% synthetic for data augmentation
-   ```
+# 4. Evaluate
+python -m app.analysis.evaluate_bilstm
+```
 
-4. Retrain and evaluate as above.
+**Training modes:**
 
-**Why real data matters:** A single person recording 10–15 videos per exercise class yields ~300–400 training sequences per class after windowing — sufficient for this BiLSTM size. Real data eliminates the domain gap between synthetic oscillation patterns and actual MediaPipe 2D projections.
+| Mode | Data | When to use |
+|------|------|-------------|
+| `synthetic` | Generated + augmented | Default; no recordings needed |
+| `real` | `.npy` files from preprocess script | When you have enough real data (50+/class) |
+| `mixed` | Real + synthetic fill | Best option when you have some real data |
 
-**Recommended recording variations per exercise:**
-- Different speeds (slow / normal / fast reps)
-- Different depths (e.g. shallow vs deep squat)
-- Different camera angles (front, 45°, side)
-- Different positions in frame (centered, left, right)
+**Synthetic augmentations** (applied in `_augment_sequence()`, `train_bilstm.py`):
+- Mirror/flip — swaps L/R feature pairs (simulates body orientation variation)
+- Time warp ±30% — simulates fast/slow reps and FPS variation
+- Phase offset — starts sequences mid-rep
+- Feature dropout (30% chance) — simulates partial occlusion
+
+**Minimum real data for good results:** 2–3 clips × 20s per exercise class (~50–80 sequences/class after windowing). Pair with `--mode mixed` to fill gaps with synthetic data.
+
+**Why real data matters:** Real data eliminates domain gap. Synthetic only → ~60–70% real-video accuracy; mixed with 50 real sequences → ~90%+.
 
 ### Tests
 
@@ -217,6 +254,15 @@ python -m pytest tests/ --cov=app/analysis --cov-report=term-missing
 
 ## Adding a New Exercise
 
+**With dynamic class support (no code changes needed):**
+1. Record 2–3 video clips, place in `data/real/videos/<new_exercise_name>/`
+2. Run `python -m app.analysis.preprocess_real_data`
+3. Retrain: `python -m app.analysis.train_bilstm --mode mixed`
+4. The new class is auto-discovered and embedded in weights — frontend renders it with `getExerciseLabel()` fallback
+
+**For full rule-based analyser support (rep counting + form scoring):**
 1. Create `backend/app/analysis/exercises/<name>.py` implementing `ExerciseAnalyser` from `base.py`
-2. Register it in `app/analysis/rule_based.py`
-3. Add TypeScript type updates in `frontend/src/lib/types.ts` if new fields are returned
+2. Register it in `app/analysis/bilstm_analyser.ANALYSERS` and `app/analysis/rule_based.py`
+3. Optionally add to `PHYSICS_CONSTRAINTS` in `bilstm_analyser.py` if the exercise has hard motion constraints
+
+Without a rule-based analyser, the new exercise will be classified correctly but `rep_count` and `form_score` will be 0 (BiLSTM classifies it; `_minimal_result()` is returned).

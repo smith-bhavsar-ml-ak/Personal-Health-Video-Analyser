@@ -28,7 +28,10 @@ async def voice_query(
 
     # Resolve query text — run blocking Whisper in thread pool
     if request.audio_b64:
-        query_text = await asyncio.to_thread(transcribe_audio, request.audio_b64)
+        transcribed = await asyncio.to_thread(transcribe_audio, request.audio_b64)
+        # Prepend context prefix if the client sends one (multi-session today context)
+        query_text = f"{request.query_text.strip()} {transcribed}".strip() \
+            if request.query_text else transcribed
     elif request.query_text:
         query_text = request.query_text
     else:

@@ -1,28 +1,31 @@
+import asyncio
 import base64
-import tempfile
-import os
-import pyttsx3
+import io
+
+import edge_tts
+
+_VOICE = "en-US-JennyNeural"   # natural-sounding neural voice
+
+
+async def _synthesise_async(text: str) -> bytes:
+    communicate = edge_tts.Communicate(text, _VOICE)
+    buf = io.BytesIO()
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            buf.write(chunk["data"])
+    return buf.getvalue()
 
 
 def synthesise_speech(text: str) -> str:
     """
-    Convert text to speech using pyttsx3.
-    Returns base64-encoded WAV audio string.
+    Convert text to speech using Microsoft Edge TTS (en-US-JennyNeural).
+    Returns base64-encoded MP3 audio string, or None on failure.
     """
-    engine = pyttsx3.init()
-    engine.setProperty("rate", 175)   # words per minute
-    engine.setProperty("volume", 0.9)
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-        tmp_path = tmp.name
-
     try:
-        engine.save_to_file(text, tmp_path)
-        engine.runAndWait()
-
-        with open(tmp_path, "rb") as f:
-            audio_bytes = f.read()
-
+        audio_bytes = asyncio.run(_synthesise_async(text))
+        if not audio_bytes:
+            return None
         return base64.b64encode(audio_bytes).decode("utf-8")
-    finally:
-        os.unlink(tmp_path)
+    except Exception as e:
+        print(f"[TTS] edge-tts failed: {e}")
+        return None

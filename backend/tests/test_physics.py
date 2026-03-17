@@ -47,20 +47,18 @@ def test_jj_valid_passes():
     assert reason == ""
 
 
-def test_jj_fails_knee_range_too_large():
-    """knee_range = 0.17 > 0.10 threshold → must reject."""
-    feats = _make_feats(knee_lo=0.80, knee_hi=0.97, wrist_max=0.30)
+def test_jj_high_knee_range_still_passes():
+    """Real video shows knee_range=0.47 on valid JJ — knee constraints removed."""
+    feats = _make_feats(knee_lo=0.50, knee_hi=0.97, wrist_max=0.30)
     valid, reason = _physics_check("jumping_jack", feats)
-    assert valid is False
-    assert "knee_range" in reason or "knee" in reason.lower()
+    assert valid is True, f"High knee range should pass after real-data calibration: {reason}"
 
 
-def test_jj_fails_knee_min_too_low():
-    """knee_min = 0.80 < 0.85 threshold → must reject."""
-    feats = _make_feats(knee_lo=0.80, knee_hi=0.93, wrist_max=0.30)
-    # range = 0.13 but knee_min = 0.80 < 0.85
+def test_jj_low_knee_min_still_passes():
+    """Real video shows knee_min=0.53 on valid JJ — knee_min constraint removed."""
+    feats = _make_feats(knee_lo=0.53, knee_hi=0.97, wrist_max=0.30)
     valid, reason = _physics_check("jumping_jack", feats)
-    assert valid is False
+    assert valid is True, f"Low knee_min should pass after real-data calibration: {reason}"
 
 
 def test_jj_fails_wrists_never_overhead():
@@ -71,20 +69,15 @@ def test_jj_fails_wrists_never_overhead():
     assert "wrist" in reason.lower()
 
 
-@pytest.mark.parametrize("knee_range,expected_valid", [
-    (0.09, True),    # below threshold
-    (0.10, True),    # exactly at threshold (inclusive boundary)
-    (0.101, False),  # just over threshold
-    (0.20, False),   # well above
-])
-def test_jj_knee_range_boundary(knee_range, expected_valid):
-    """Threshold is knee_range > 0.10 (strictly greater than)."""
+@pytest.mark.parametrize("knee_range", [0.09, 0.10, 0.20, 0.47, 0.50])
+def test_jj_any_knee_range_passes_if_wrist_ok(knee_range):
+    """Knee range no longer constrained — any value passes as long as wrist is overhead."""
     knee_hi = 0.97
-    knee_lo = knee_hi - knee_range
+    knee_lo = max(0.0, knee_hi - knee_range)
     feats = _make_feats(knee_lo=knee_lo, knee_hi=knee_hi, wrist_max=0.30)
-    valid, _ = _physics_check("jumping_jack", feats)
-    assert valid is expected_valid, \
-        f"knee_range={knee_range:.3f} → expected valid={expected_valid}, got {valid}"
+    valid, reason = _physics_check("jumping_jack", feats)
+    assert valid is True, \
+        f"knee_range={knee_range:.3f} should pass (knee constraint removed): {reason}"
 
 
 # ── plank tests ───────────────────────────────────────────────────────────────
@@ -148,7 +141,7 @@ def test_unconstrained_classes_always_pass(class_name, physics_vectors):
 # ── Reason string quality ─────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("class_name,feats_key", [
-    ("jumping_jack", "jj_fail_knee_range"),
+    ("jumping_jack", "jj_fail_wrist_low"),   # only remaining JJ constraint is wrist elevation
     ("plank",        "plank_fail_knee"),
     ("bicep_curl",   "bicep_fail_no_flex"),
 ])
