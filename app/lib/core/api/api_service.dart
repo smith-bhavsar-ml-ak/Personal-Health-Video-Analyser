@@ -3,6 +3,8 @@ import '../models/auth_response.dart';
 import '../models/session_summary.dart';
 import '../models/session_result.dart';
 import '../models/voice_query.dart';
+import '../models/progress.dart';
+import '../models/workout_plan.dart';
 import 'client.dart';
 
 /// All API calls — mirrors frontend/src/lib/api.ts exactly.
@@ -36,6 +38,16 @@ class ApiService {
       'user_id': res.data!['user_id'] as String,
       'email':   res.data!['email']   as String,
     };
+  }
+
+  Future<Map<String, dynamic>> getProfile() async {
+    final res = await _dio.get<Map<String, dynamic>>('/auth/profile');
+    return res.data!;
+  }
+
+  Future<Map<String, dynamic>> saveProfile(Map<String, dynamic> data) async {
+    final res = await _dio.put<Map<String, dynamic>>('/auth/profile', data: data);
+    return res.data!;
   }
 
   // ── Sessions ───────────────────────────────────────────────────────────────
@@ -85,5 +97,61 @@ class ApiService {
       data: request.toJson(),
     );
     return VoiceQueryResponse.fromJson(res.data!);
+  }
+
+  // ── Progress ────────────────────────────────────────────────────────────────
+
+  Future<ProgressSummary> getProgressSummary() async {
+    final res = await _dio.get<Map<String, dynamic>>('/progress/summary');
+    return ProgressSummary.fromJson(res.data!);
+  }
+
+  Future<List<FormScorePoint>> getFormTrend({int limit = 20}) async {
+    final res = await _dio.get<List<dynamic>>('/progress/form-trend', queryParameters: {'limit': limit});
+    return res.data!.map((j) => FormScorePoint.fromJson(j as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<ExerciseStat>> getExerciseStats() async {
+    final res = await _dio.get<List<dynamic>>('/progress/exercise-stats');
+    return res.data!.map((j) => ExerciseStat.fromJson(j as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<WeightPoint>> getWeightHistory({int limit = 90}) async {
+    final res = await _dio.get<List<dynamic>>('/progress/weight', queryParameters: {'limit': limit});
+    return res.data!.map((j) => WeightPoint.fromJson(j as Map<String, dynamic>)).toList();
+  }
+
+  Future<WeightPoint> logWeight(double weightKg) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/progress/weight',
+      data: {'weight_kg': weightKg},
+    );
+    return WeightPoint.fromJson(res.data!);
+  }
+
+  // ── Plans ───────────────────────────────────────────────────────────────────
+
+  Future<WorkoutPlan> generatePlan() async {
+    final res = await _dio.post<Map<String, dynamic>>('/plans/generate');
+    return WorkoutPlan.fromJson(res.data!);
+  }
+
+  Future<List<WorkoutPlan>> listPlans() async {
+    final res = await _dio.get<List<dynamic>>('/plans');
+    return res.data!.map((j) => WorkoutPlan.fromJson(j as Map<String, dynamic>)).toList();
+  }
+
+  Future<WorkoutPlan> getPlan(String id) async {
+    final res = await _dio.get<Map<String, dynamic>>('/plans/$id');
+    return WorkoutPlan.fromJson(res.data!);
+  }
+
+  Future<Map<String, dynamic>> togglePlanExercise(String planId, String exerciseId) async {
+    final res = await _dio.patch<Map<String, dynamic>>('/plans/$planId/exercises/$exerciseId/toggle');
+    return res.data!;
+  }
+
+  Future<void> deletePlan(String id) async {
+    await _dio.delete<void>('/plans/$id');
   }
 }

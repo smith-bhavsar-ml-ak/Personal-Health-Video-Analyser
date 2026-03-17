@@ -47,6 +47,9 @@ dependencies:
   # Charts
   fl_chart: ^0.68.0
 
+  # Sharing
+  share_plus: ^10.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

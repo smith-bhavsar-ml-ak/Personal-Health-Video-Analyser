@@ -16,6 +16,7 @@ def aggregate_results(exercise_results: list[ExerciseResult]) -> dict:
             "form_score": result.form_score,
             "start_frame": result.start_frame,
             "end_frame": result.end_frame,
+            "rep_scores": [round(s, 1) for s in result.rep_scores] if result.rep_scores else [],
             "posture_errors": [
                 {
                     "error_type": e.error_type,

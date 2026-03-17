@@ -6,7 +6,7 @@ from app.db import crud
 from app.auth.jwt import hash_password, verify_password, create_access_token
 from app.auth.deps import get_current_user
 from app.db.models import User
-from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse, UserResponse
+from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse, UserResponse, ProfileData
 
 router = APIRouter(tags=["auth"])
 
@@ -38,3 +38,25 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)):
     return UserResponse(user_id=current_user.id, email=current_user.email)
+
+
+@router.get("/profile", response_model=ProfileData)
+async def get_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    profile = await crud.get_profile(db, current_user.id)
+    if profile is None:
+        return ProfileData()
+    return profile
+
+
+@router.put("/profile", response_model=ProfileData)
+async def update_profile(
+    body: ProfileData,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    data = body.model_dump(exclude_none=False)
+    profile = await crud.upsert_profile(db, current_user.id, data)
+    return profile

@@ -84,20 +84,39 @@ class _ExerciseCardState extends State<ExerciseCard> {
                     ],
                   ),
 
-                  // Rep score chart
-                  if ((widget.repScores?.isNotEmpty ?? false)) ...[
+                  // Rep score chart — use persisted scores from model
+                  if (s.repScores.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    Text(
-                      'Rep Scores',
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
+                    Row(children: [
+                      Text('Rep-by-Rep', style: Theme.of(context).textTheme.labelLarge),
+                      const Spacer(),
+                      _RepLegend(),
+                    ]),
                     const SizedBox(height: 8),
                     SizedBox(
                       height: 80,
-                      child: _RepScoreChart(
-                        scores: widget.repScores!,
-                        color: color,
-                      ),
+                      child: _RepScoreChart(scores: s.repScores, color: color),
+                    ),
+                    const SizedBox(height: 8),
+                    // Rep quality pills
+                    Wrap(
+                      spacing: 6, runSpacing: 6,
+                      children: s.repScores.asMap().entries.map((e) {
+                        final good = e.value >= 80;
+                        final clr  = good ? AppColors.health : AppColors.warning;
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: clr.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: clr.withValues(alpha: 0.35)),
+                          ),
+                          child: Text(
+                            'R${e.key + 1}  ${e.value.round()}%',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: clr),
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ],
 
@@ -218,6 +237,30 @@ class _PostureErrorRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _RepLegend extends StatelessWidget {
+  const _RepLegend();
+
+  @override
+  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
+        _Dot(AppColors.health),
+        const SizedBox(width: 4),
+        Text('Good ≥80%', style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        const SizedBox(width: 10),
+        _Dot(AppColors.warning),
+        const SizedBox(width: 4),
+        Text('Needs work', style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      ]);
+}
+
+class _Dot extends StatelessWidget {
+  final Color color;
+  const _Dot(this.color);
+
+  @override
+  Widget build(BuildContext context) =>
+      Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle));
 }
 
 class _RepScoreChart extends StatelessWidget {

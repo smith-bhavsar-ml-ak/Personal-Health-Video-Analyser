@@ -10,6 +10,7 @@ import '../../../core/api/api_service.dart';
 import '../../../core/models/session_summary.dart';
 import '../../../core/models/voice_query.dart';
 import '../../../core/utils/audio_helper.dart';
+import '../../profile/providers/profile_provider.dart';
 
 class ChatMessage {
   final bool isUser;
@@ -74,7 +75,8 @@ class AssistantState {
 }
 
 class AssistantNotifier extends StateNotifier<AssistantState> {
-  AssistantNotifier() : super(const AssistantState()) {
+  final Ref _ref;
+  AssistantNotifier(this._ref) : super(const AssistantState()) {
     _loadSessions();
     _audioPlayer.onPlayerStateChanged.listen((ps) {
       if (ps == PlayerState.completed || ps == PlayerState.stopped) {
@@ -156,6 +158,12 @@ class AssistantNotifier extends StateNotifier<AssistantState> {
   }
 
   String _withContextPrefix(String query) => _contextPrefix() + query;
+
+  String? _profileContext() {
+    final profile = _ref.read(profileProvider);
+    final ctx = profile.toLlmContext();
+    return ctx.isEmpty ? null : ctx;
+  }
 
   /// Strip the context prefix from a returned query_text (Whisper output
   /// will NOT have the prefix — the backend prepends it — so this is only
@@ -254,7 +262,7 @@ class AssistantNotifier extends StateNotifier<AssistantState> {
     final query = _isSmallTalk(trimmed.toLowerCase())
         ? trimmed
         : _withContextPrefix(trimmed);
-    await _callApi(sessionId, VoiceQueryRequest(queryText: query));
+    await _callApi(sessionId, VoiceQueryRequest(queryText: query, profileContext: _profileContext()));
   }
 
   Future<void> toggleRecording() async {
@@ -345,8 +353,9 @@ class AssistantNotifier extends StateNotifier<AssistantState> {
     await _callApi(
       sessionId,
       VoiceQueryRequest(
-        audioB64:  base64Encode(bytes),
-        queryText: _contextPrefix(), // context prefix; audio is the actual query
+        audioB64:       base64Encode(bytes),
+        queryText:      _contextPrefix(),
+        profileContext: _profileContext(),
       ),
       voicePlaceholderIdx: placeholderIdx,
     );
@@ -420,5 +429,5 @@ class AssistantNotifier extends StateNotifier<AssistantState> {
 
 final assistantProvider =
     StateNotifierProvider.autoDispose<AssistantNotifier, AssistantState>(
-  (_) => AssistantNotifier(),
+  (ref) => AssistantNotifier(ref),
 );

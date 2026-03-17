@@ -38,6 +38,11 @@ class SecureStorage {
   Future<String?> readThemeMode()           => _storage.read(key: _kThemeMode);
   Future<void>    writeThemeMode(String m)  => _storage.write(key: _kThemeMode, value: m);
 
+  // ── User Profile ──────────────────────────────────────────────────────────
+
+  Future<String?> readProfile()          => _storage.read(key: 'user_profile');
+  Future<void>    writeProfile(String p) => _storage.write(key: 'user_profile', value: p);
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   Future<void> clearAll() => _storage.deleteAll();

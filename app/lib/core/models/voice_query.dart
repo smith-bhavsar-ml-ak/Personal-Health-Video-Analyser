@@ -22,12 +22,14 @@ class VoiceQuery {
 class VoiceQueryRequest {
   final String? queryText;
   final String? audioB64;
+  final String? profileContext;
 
-  const VoiceQueryRequest({this.queryText, this.audioB64});
+  const VoiceQueryRequest({this.queryText, this.audioB64, this.profileContext});
 
   Map<String, dynamic> toJson() => {
-        if (queryText != null) 'query_text': queryText,
-        if (audioB64  != null) 'audio_b64':  audioB64,
+        if (queryText       != null) 'query_text':       queryText,
+        if (audioB64        != null) 'audio_b64':        audioB64,
+        if (profileContext  != null) 'profile_context':  profileContext,
       };
 }
 

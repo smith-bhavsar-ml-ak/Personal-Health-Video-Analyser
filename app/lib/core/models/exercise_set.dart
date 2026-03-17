@@ -27,6 +27,7 @@ class ExerciseSet {
   final int durationS;
   final double formScore;
   final List<PostureError> postureErrors;
+  final List<double> repScores;
 
   const ExerciseSet({
     required this.id,
@@ -36,6 +37,7 @@ class ExerciseSet {
     required this.durationS,
     required this.formScore,
     required this.postureErrors,
+    this.repScores = const [],
   });
 
   factory ExerciseSet.fromJson(Map<String, dynamic> json) => ExerciseSet(
@@ -47,6 +49,9 @@ class ExerciseSet {
         formScore:    (json['form_score']   as num).toDouble(),
         postureErrors: (json['posture_errors'] as List<dynamic>)
             .map((e) => PostureError.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        repScores: (json['rep_scores'] as List<dynamic>? ?? [])
+            .map((v) => (v as num).toDouble())
             .toList(),
       );
 }

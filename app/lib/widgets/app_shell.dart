@@ -3,11 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/theme/app_theme.dart';
 import '../features/auth/providers/auth_provider.dart';
+import '../features/profile/providers/profile_provider.dart';
 import 'bottom_nav.dart';
 import 'side_nav.dart';
 
+/// Whether the desktop/tablet sidebar is expanded. Toggled by the hamburger.
+final sideNavExpandedProvider = StateProvider<bool>((ref) => true);
+
 /// Adaptive shell:
-/// - ≥ 768 px: 240 px fixed sidebar + fluid content
+/// - ≥ 768 px: collapsible 240 px sidebar + fluid content
 /// - < 768 px: content + bottom navigation bar + profile in mobile app bars
 class AppShell extends ConsumerWidget {
   final Widget child;
@@ -15,17 +19,42 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final width  = MediaQuery.of(context).size.width;
-    final isWide = width >= 768;
-    final cs     = Theme.of(context).colorScheme;
+    final width      = MediaQuery.of(context).size.width;
+    final isWide     = width >= 768;
+    final isExpanded = ref.watch(sideNavExpandedProvider);
+    final cs         = Theme.of(context).colorScheme;
 
     if (isWide) {
       return Scaffold(
         backgroundColor: cs.surface,
         body: Row(
           children: [
-            const SideNav(),
-            Container(width: 1, color: cs.outline),
+            if (isExpanded) ...[
+              SideNav(
+                onCollapse: () =>
+                    ref.read(sideNavExpandedProvider.notifier).state = false,
+              ),
+              Container(width: 1, color: cs.outline),
+            ] else ...[
+              // Collapsed rail — just the hamburger icon
+              Container(
+                width: 56,
+                color: cs.surface,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 14),
+                    IconButton(
+                      icon: const Icon(Icons.menu, size: 22),
+                      onPressed: () =>
+                          ref.read(sideNavExpandedProvider.notifier).state = true,
+                      tooltip: 'Expand sidebar',
+                    ),
+                  ],
+                ),
+              ),
+              Container(width: 1, color: cs.outline),
+            ],
             Expanded(child: child),
           ],
         ),
@@ -45,8 +74,11 @@ class ProfileIconButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final profile  = ref.watch(profileProvider);
     final auth     = ref.watch(authProvider);
-    final initials = _initials(auth.email);
+    final initials = profile.displayName?.isNotEmpty == true
+        ? profile.initials
+        : _emailInitials(auth.email);
 
     return Padding(
       padding: const EdgeInsets.only(right: 8),
@@ -68,7 +100,7 @@ class ProfileIconButton extends ConsumerWidget {
     );
   }
 
-  static String _initials(String? email) {
+  static String _emailInitials(String? email) {
     if (email == null) return '?';
     final local = email.split('@').first;
     final parts = local.split(RegExp(r'[._-]'));

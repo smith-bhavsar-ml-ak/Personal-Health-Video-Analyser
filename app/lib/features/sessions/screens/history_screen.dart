@@ -7,7 +7,6 @@ import '../../../core/theme/app_theme.dart';
 import '../providers/sessions_provider.dart';
 import '../../../widgets/app_shell.dart';
 import '../../../widgets/exercise_badge.dart';
-import '../../../widgets/score_bar.dart';
 
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
@@ -15,7 +14,11 @@ class HistoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sessions = ref.watch(sessionsProvider);
-    final isMobile = MediaQuery.of(context).size.width < 768;
+    final width    = MediaQuery.of(context).size.width;
+    final isMobile = width < 768;
+
+    // Desktop: 4 cards per row (3/12 grid), tablet: 2, mobile: 1
+    final crossAxisCount = isMobile ? 1 : (width < 1100 ? 2 : 4);
 
     return Scaffold(
       appBar: AppBar(
@@ -24,39 +27,21 @@ class HistoryScreen extends ConsumerWidget {
       ),
       body: sessions.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error:   (e, _) => Center(child: Text('Error: $e')),
         data: (list) {
-          if (list.isEmpty) {
-            final cs = Theme.of(context).colorScheme;
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.history, size: 48, color: cs.onSurfaceVariant),
-                  const SizedBox(height: 12),
-                  Text('No sessions yet',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => context.go('/analyze'),
-                    child: const Text('Analyze a Video'),
-                  ),
-                ],
-              ),
-            );
-          }
+          if (list.isEmpty) return _EmptyState();
           return RefreshIndicator(
             onRefresh: () => ref.read(sessionsProvider.notifier).refresh(),
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: list.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, i) => _SessionTile(
-                session: list[i],
-                onDelete: () => _confirmDelete(context, ref, list[i]),
-                onTap: () => context.go('/sessions/${list[i].id}'),
-              ),
-            ),
+            child: isMobile
+                ? _MobileList(
+                    sessions: list,
+                    onDelete: (s) => _confirmDelete(context, ref, s),
+                  )
+                : _DesktopGrid(
+                    sessions:      list,
+                    crossAxisCount: crossAxisCount,
+                    onDelete: (s) => _confirmDelete(context, ref, s),
+                  ),
           );
         },
       ),
@@ -84,8 +69,7 @@ class HistoryScreen extends ConsumerWidget {
                 style: Theme.of(ctx).textTheme.bodyMedium),
             const SizedBox(height: 24),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.error),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Delete'),
             ),
@@ -102,15 +86,162 @@ class HistoryScreen extends ConsumerWidget {
   }
 }
 
-// ── Session tile ──────────────────────────────────────────────────────────────
+// ── Desktop grid ──────────────────────────────────────────────────────────────
 
-class _SessionTile extends StatelessWidget {
+class _DesktopGrid extends StatelessWidget {
+  final List<SessionSummary> sessions;
+  final int crossAxisCount;
+  final void Function(SessionSummary) onDelete;
+
+  const _DesktopGrid({
+    required this.sessions,
+    required this.crossAxisCount,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      padding: const EdgeInsets.all(20),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount:   crossAxisCount,
+        crossAxisSpacing: 14,
+        mainAxisSpacing:  14,
+        childAspectRatio: 1.55, // wide-ish compact card
+      ),
+      itemCount:   sessions.length,
+      itemBuilder: (context, i) => _GridCard(
+        session:  sessions[i],
+        onDelete: () => onDelete(sessions[i]),
+        onTap:    () => context.go('/sessions/${sessions[i].id}'),
+      ),
+    );
+  }
+}
+
+// ── Mobile list ───────────────────────────────────────────────────────────────
+
+class _MobileList extends StatelessWidget {
+  final List<SessionSummary> sessions;
+  final void Function(SessionSummary) onDelete;
+
+  const _MobileList({required this.sessions, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding:           const EdgeInsets.all(16),
+      itemCount:         sessions.length,
+      separatorBuilder:  (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, i) => _MobileTile(
+        session:  sessions[i],
+        onDelete: () => onDelete(sessions[i]),
+        onTap:    () => context.go('/sessions/${sessions[i].id}'),
+      ),
+    );
+  }
+}
+
+// ── Desktop grid card ─────────────────────────────────────────────────────────
+
+class _GridCard extends StatelessWidget {
   final SessionSummary session;
   final VoidCallback onTap;
   final VoidCallback onDelete;
-  const _SessionTile({
-    required this.session, required this.onTap, required this.onDelete,
-  });
+
+  const _GridCard({required this.session, required this.onTap, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs     = Theme.of(context).colorScheme;
+    final dt     = DateTime.tryParse(session.createdAt) ?? DateTime.now();
+    final date   = DateFormat('MMM d').format(dt);
+    final time   = DateFormat('HH:mm').format(dt);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: cs.outline),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Row 1: date + status + delete ───────────────────────────
+              Row(
+                children: [
+                  Icon(Icons.calendar_today_outlined,
+                      size: 12, color: cs.onSurfaceVariant),
+                  const SizedBox(width: 4),
+                  Text(date,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 4),
+                  Text(time,
+                      style: TextStyle(
+                          fontSize: 11, color: cs.onSurfaceVariant)),
+                  const Spacer(),
+                  if (!session.isCompleted)
+                    _MiniChip(status: session.status),
+                  _DeleteBtn(onDelete: onDelete),
+                ],
+              ),
+
+              const SizedBox(height: 10),
+
+              // ── Row 2: exercise badges ───────────────────────────────────
+              Expanded(
+                child: Wrap(
+                  spacing: 5, runSpacing: 5,
+                  children: session.exerciseTypes
+                      .map(ExerciseBadge.new)
+                      .toList(),
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // ── Row 3: stats chips ───────────────────────────────────────
+              if (session.isCompleted)
+                Row(
+                  children: [
+                    _StatChip(
+                      icon:  Icons.repeat_rounded,
+                      label: '${session.totalReps} reps',
+                    ),
+                    if (session.durationS != null) ...[
+                      const SizedBox(width: 6),
+                      _StatChip(
+                        icon:  Icons.timer_outlined,
+                        label: _dur(session.durationS!),
+                      ),
+                    ],
+                    const Spacer(),
+                    _FormLabel(score: session.avgFormScore),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Mobile tile (unchanged design, slightly polished) ─────────────────────────
+
+class _MobileTile extends StatelessWidget {
+  final SessionSummary session;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  const _MobileTile({required this.session, required this.onTap, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -141,80 +272,187 @@ class _SessionTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: cs.outline),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.calendar_today_outlined,
-                      size: 14, color: cs.onSurfaceVariant),
-                  const SizedBox(width: 5),
-                  Text(date, style: Theme.of(context).textTheme.bodySmall),
-                  const Spacer(),
-                  if (!session.isCompleted) _StatusChip(status: session.status),
-                  if (session.durationS != null)
-                    Text(_dur(session.durationS!),
-                        style: Theme.of(context).textTheme.bodySmall),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                        size: 18, color: AppColors.error),
-                    tooltip: 'Delete',
-                    onPressed: onDelete,
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
-                    padding: EdgeInsets.zero,
-                  ),
-                ],
-              ),
-              if (session.exerciseTypes.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6, runSpacing: 6,
-                  children:
-                      session.exerciseTypes.map(ExerciseBadge.new).toList(),
+              // Main content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.calendar_today_outlined,
+                            size: 12, color: cs.onSurfaceVariant),
+                        const SizedBox(width: 4),
+                        Text(date,
+                            style: Theme.of(context).textTheme.bodySmall),
+                        const Spacer(),
+                        if (!session.isCompleted)
+                          _MiniChip(status: session.status),
+                        if (session.durationS != null)
+                          Text(_dur(session.durationS!),
+                              style: Theme.of(context).textTheme.bodySmall),
+                        const SizedBox(width: 4),
+                        _DeleteBtn(onDelete: onDelete),
+                      ],
+                    ),
+                    if (session.exerciseTypes.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6, runSpacing: 6,
+                        children: session.exerciseTypes
+                            .map(ExerciseBadge.new)
+                            .toList(),
+                      ),
+                    ],
+                    if (session.isCompleted) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _StatChip(
+                            icon:  Icons.repeat_rounded,
+                            label: '${session.totalReps} reps',
+                          ),
+                          const Spacer(),
+                          _FormLabel(score: session.avgFormScore),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
-              ],
-              if (session.isCompleted) ...[
-                const SizedBox(height: 10),
-                Text('${session.totalReps} reps',
-                    style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 6),
-                ScoreBar(session.avgFormScore),
-              ],
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
 
-  static String _dur(int s) {
-    final m = s ~/ 60;
-    return m > 0 ? '${m}m ${s % 60}s' : '${s}s';
+// ── Shared sub-widgets ────────────────────────────────────────────────────────
+
+class _StatChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _StatChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: cs.onSurfaceVariant),
+        const SizedBox(width: 3),
+        Text(label,
+            style: TextStyle(
+                fontSize: 11,
+                color: cs.onSurfaceVariant,
+                fontWeight: FontWeight.w500)),
+      ],
+    );
   }
 }
 
-class _StatusChip extends StatelessWidget {
+class _FormLabel extends StatelessWidget {
+  final double score;
+  const _FormLabel({required this.score});
+
+  Color _color() {
+    if (score >= 80) return AppColors.health;
+    if (score >= 50) return AppColors.warning;
+    return AppColors.error;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _color();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        'Form ${score.round()}%',
+        style: TextStyle(
+            fontSize: 11, color: color, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+class _MiniChip extends StatelessWidget {
   final String status;
-  const _StatusChip({required this.status});
+  const _MiniChip({required this.status});
 
   @override
   Widget build(BuildContext context) {
     final isProcessing = status == 'processing';
     final color = isProcessing ? AppColors.warning : AppColors.error;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      margin: const EdgeInsets.only(right: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(5),
       ),
       child: Text(
         status,
         style: TextStyle(
-            fontSize: 11, color: color, fontWeight: FontWeight.w600),
+            fontSize: 10, color: color, fontWeight: FontWeight.w600),
       ),
     );
   }
+}
+
+class _DeleteBtn extends StatelessWidget {
+  final VoidCallback onDelete;
+  const _DeleteBtn({required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onDelete,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: Icon(Icons.delete_outline,
+            size: 16, color: AppColors.error.withValues(alpha: 0.7)),
+      ),
+    );
+  }
+}
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.history, size: 48, color: cs.onSurfaceVariant),
+          const SizedBox(height: 12),
+          Text('No sessions yet',
+              style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: 200,
+            child: ElevatedButton(
+              onPressed: () => GoRouter.of(context).go('/analyze'),
+              child: const Text('Analyze a Video'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _dur(int s) {
+  final m = s ~/ 60;
+  return m > 0 ? '${m}m ${s % 60}s' : '${s}s';
 }

@@ -2,11 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart' show Share;
 import '../../../core/models/session_result.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/sessions_provider.dart';
 import '../../../widgets/ai_feedback_panel.dart';
 import '../../../widgets/exercise_card.dart';
+
+void _shareSession(BuildContext context, SessionResult s) {
+  final date = DateFormat('MMM d, yyyy').format(
+      DateTime.tryParse(s.createdAt) ?? DateTime.now());
+  final exercises = s.exerciseSets
+      .map((e) => e.exerciseType.replaceAll('_', ' '))
+      .toSet()
+      .join(', ');
+  final lines = [
+    'Workout — $date',
+    'Form Score: ${s.avgFormScore.toStringAsFixed(0)}%',
+    'Total Reps: ${s.totalReps}',
+    if (exercises.isNotEmpty) 'Exercises: $exercises',
+    if (s.durationS != null)
+      'Duration: ${s.durationS! ~/ 60}m ${s.durationS! % 60}s',
+    '',
+    'Tracked with Personal Health Video Analyzer',
+  ];
+  Share.share(lines.join('\n'));
+}
 
 class SessionDetailScreen extends ConsumerWidget {
   final String sessionId;
@@ -21,6 +42,13 @@ class SessionDetailScreen extends ConsumerWidget {
         title: const Text('Session Details'),
         leading: BackButton(onPressed: () => context.go('/history')),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined),
+            tooltip: 'Share session',
+            onPressed: () {
+              result.whenData((s) => _shareSession(context, s));
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.mic_outlined),
             tooltip: 'Ask AI Coach',

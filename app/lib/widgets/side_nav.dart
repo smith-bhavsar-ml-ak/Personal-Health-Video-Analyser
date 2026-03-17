@@ -5,14 +5,18 @@ import '../core/theme/app_theme.dart';
 import '../features/auth/providers/auth_provider.dart';
 
 class SideNav extends ConsumerWidget {
-  const SideNav({super.key});
+  final VoidCallback? onCollapse;
+  const SideNav({super.key, this.onCollapse});
 
   static const _items = [
-    _NavItem(icon: Icons.home_outlined,      activeIcon: Icons.home,         label: 'Home',      path: '/'),
-    _NavItem(icon: Icons.video_call_outlined, activeIcon: Icons.video_call,   label: 'Analyze',   path: '/analyze'),
-    _NavItem(icon: Icons.history_outlined,    activeIcon: Icons.history,      label: 'History',   path: '/history'),
-    _NavItem(icon: Icons.mic_outlined,        activeIcon: Icons.mic,          label: 'Assistant', path: '/assistant'),
-    _NavItem(icon: Icons.settings_outlined,   activeIcon: Icons.settings,     label: 'Settings',  path: '/settings'),
+    _NavItem(icon: Icons.home_outlined,         activeIcon: Icons.home,            label: 'Home',      path: '/'),
+    _NavItem(icon: Icons.video_call_outlined,   activeIcon: Icons.video_call,      label: 'Analyze',   path: '/analyze'),
+    _NavItem(icon: Icons.history_outlined,      activeIcon: Icons.history,         label: 'History',   path: '/history'),
+    _NavItem(icon: Icons.trending_up_outlined,  activeIcon: Icons.trending_up,     label: 'Progress',  path: '/progress'),
+    _NavItem(icon: Icons.calendar_month_outlined, activeIcon: Icons.calendar_month, label: 'Plans',    path: '/plans'),
+    _NavItem(icon: Icons.menu_book_outlined,    activeIcon: Icons.menu_book,       label: 'Library',   path: '/library'),
+    _NavItem(icon: Icons.mic_outlined,          activeIcon: Icons.mic,             label: 'Assistant', path: '/assistant'),
+    _NavItem(icon: Icons.settings_outlined,     activeIcon: Icons.settings,        label: 'Settings',  path: '/settings'),
   ];
 
   @override
@@ -29,7 +33,7 @@ class SideNav extends ConsumerWidget {
         children: [
           // ── Brand header ──────────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             child: Row(
               children: [
                 Container(
@@ -41,10 +45,20 @@ class SideNav extends ConsumerWidget {
                   child: const Icon(Icons.fitness_center, color: AppColors.primary, size: 18),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  'PHVA',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(letterSpacing: 0.5),
+                Expanded(
+                  child: Text(
+                    'PHVA',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(letterSpacing: 0.5),
+                  ),
                 ),
+                if (onCollapse != null)
+                  IconButton(
+                    icon: const Icon(Icons.menu_open, size: 20),
+                    onPressed: onCollapse,
+                    tooltip: 'Collapse sidebar',
+                    visualDensity: VisualDensity.compact,
+                    color: cs.onSurfaceVariant,
+                  ),
               ],
             ),
           ),

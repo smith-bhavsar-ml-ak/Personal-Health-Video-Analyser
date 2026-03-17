@@ -12,6 +12,10 @@ import 'features/sessions/screens/history_screen.dart';
 import 'features/sessions/screens/session_detail_screen.dart';
 import 'features/assistant/screens/assistant_screen.dart';
 import 'features/settings/screens/settings_screen.dart';
+import 'features/profile/screens/edit_profile_screen.dart';
+import 'features/progress/screens/progress_screen.dart';
+import 'features/plans/screens/plans_screen.dart';
+import 'features/library/screens/library_screen.dart';
 import 'widgets/app_shell.dart';
 
 /// Bridges Riverpod auth state → GoRouter refreshListenable.
@@ -58,7 +62,15 @@ final _routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(path: '/assistant', builder: (_, __) => const AssistantScreen()),
-          GoRoute(path: '/settings',  builder: (_, __) => const SettingsScreen()),
+          GoRoute(path: '/settings',       builder: (_, __) => const SettingsScreen()),
+          GoRoute(path: '/profile/edit',  builder: (_, __) => const EditProfileScreen()),
+          GoRoute(path: '/progress',      builder: (_, __) => const ProgressScreen()),
+          GoRoute(path: '/plans',         builder: (_, __) => const PlansScreen()),
+          GoRoute(
+            path: '/plans/:id',
+            builder: (_, state) => PlanDetailScreen(planId: state.pathParameters['id']!),
+          ),
+          GoRoute(path: '/library',       builder: (_, __) => const LibraryScreen()),
         ],
       ),
     ],

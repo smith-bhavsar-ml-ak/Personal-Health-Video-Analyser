@@ -1,11 +1,11 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import '../storage/secure_storage.dart';
 
 const _defaultMobileBase = 'http://localhost';
 
-// Allow overriding the API base URL at build time for dev:
-// flutter run -d chrome --dart-define=API_BASE=http://localhost:8000/api/v1
+// Allow overriding the API base URL at build time:
+// flutter run -d chrome --dart-define=API_BASE=http://192.168.1.10:8000/api/v1
 const _devApiBase = String.fromEnvironment('API_BASE', defaultValue: '');
 
 /// Dio HTTP client singleton.
@@ -23,7 +23,11 @@ class ApiClient {
     String baseUrl;
     if (_devApiBase.isNotEmpty) {
       baseUrl = _devApiBase;
+    } else if (kIsWeb && kDebugMode) {
+      // Dev: Flutter server (port 3000) ≠ backend (port 8000) — use absolute URL
+      baseUrl = 'http://localhost:8000/api/v1';
     } else if (kIsWeb) {
+      // Prod: same origin, nginx proxies /api/v1 → backend
       baseUrl = '/api/v1';
     } else {
       final stored = await SecureStorage.instance.readServerUrl();

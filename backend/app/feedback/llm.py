@@ -11,9 +11,15 @@ OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "30"))
 
 _client = ollama.Client(host=OLLAMA_HOST, timeout=OLLAMA_TIMEOUT)
 
-SYSTEM_PROMPT = """You are a professional fitness coach AI.
-Analyse workout data and provide clear, encouraging, and actionable coaching feedback.
-Keep responses concise (2-4 sentences per exercise). Be specific about form issues.
+SYSTEM_PROMPT = """You are a friendly, professional fitness coach AI named PHVA.
+
+When the user sends a greeting (hi, hello, good morning, hey, etc.) or small talk
+(thanks, thank you, bye, how are you, etc.), respond warmly and conversationally in
+1-2 short sentences. Do NOT reference workout data for greetings or small talk.
+
+When the user asks about their workout, analyse the provided workout data and give
+clear, encouraging, actionable coaching feedback. Keep responses concise
+(2-4 sentences per exercise). Be specific about form issues.
 Use simple, motivating language. Never be discouraging."""
 
 _FALLBACK = (
@@ -41,16 +47,44 @@ def generate_feedback(workout_context: str) -> str:
         return _FALLBACK
 
 
+_SMALL_TALK_TOKENS = {
+    "hi", "hello", "hey", "hiya", "howdy",
+    "thanks", "thank", "cheers", "appreciate",
+    "bye", "goodbye", "cya",
+    "good morning", "good afternoon", "good evening", "good night",
+    "how are you", "what's up", "sup",
+    "great", "awesome", "nice", "cool", "perfect",
+    "ok", "okay", "got it", "sounds good", "sure",
+    "welcome", "no problem",
+}
+
+
+def _is_small_talk(query: str) -> bool:
+    """Return True when the query is a greeting or social phrase (≤ 6 words)."""
+    lower = query.strip().lower()
+    words = lower.split()
+    if len(words) > 6:
+        return False
+    return any(
+        lower == tok or lower.startswith(tok + " ") or lower.endswith(" " + tok)
+        for tok in _SMALL_TALK_TOKENS
+    )
+
+
 def answer_query(query: str, session_context: str) -> str:
     try:
+        # For greetings / small-talk: don't pass workout data — let the LLM
+        # respond naturally without being anchored to exercise numbers.
+        if _is_small_talk(query):
+            user_content = query
+        else:
+            user_content = f"Here is the workout data:\n{session_context}\n\nUser question: {query}"
+
         response = _client.chat(
             model=MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": f"Here is the workout data:\n{session_context}\n\nUser question: {query}",
-                },
+                {"role": "user", "content": user_content},
             ],
         )
         return response["message"]["content"]

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, Float, ForeignKey, DateTime, Text
+from sqlalchemy import String, Integer, Float, ForeignKey, DateTime, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -19,6 +19,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     sessions: Mapped[list["WorkoutSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    profile: Mapped["UserProfile | None"] = relationship(back_populates="user", cascade="all, delete-orphan", uselist=False)
 
 
 class WorkoutSession(Base):
@@ -49,6 +50,7 @@ class ExerciseSet(Base):
     form_score: Mapped[float] = mapped_column(Float, default=0.0)
     start_frame: Mapped[int] = mapped_column(Integer, default=0)
     end_frame: Mapped[int] = mapped_column(Integer, default=0)
+    rep_scores: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [85.0, 92.0, ...]
 
     session: Mapped["WorkoutSession"] = relationship(back_populates="exercise_sets")
     posture_errors: Mapped[list["PostureError"]] = relationship(back_populates="exercise_set", cascade="all, delete-orphan")
@@ -87,3 +89,69 @@ class VoiceQuery(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     session: Mapped["WorkoutSession"] = relationship(back_populates="voice_queries")
+
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
+    display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    date_of_birth: Mapped[str | None] = mapped_column(String, nullable=True)  # ISO date string
+    gender: Mapped[str | None] = mapped_column(String, nullable=True)
+    height_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fitness_level: Mapped[str | None] = mapped_column(String, nullable=True)
+    primary_goal: Mapped[str | None] = mapped_column(String, nullable=True)
+    weekly_workout_target: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    equipment: Mapped[str | None] = mapped_column(String, nullable=True)
+    activity_level: Mapped[str | None] = mapped_column(String, nullable=True)
+    injuries: Mapped[str | None] = mapped_column(Text, nullable=True)
+    unit_system: Mapped[str] = mapped_column(String, default="metric")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user: Mapped["User"] = relationship(back_populates="profile")
+
+
+class WeightLog(Base):
+    __tablename__ = "weight_logs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    weight_kg: Mapped[float] = mapped_column(Float)
+    logged_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    user: Mapped["User"] = relationship()
+
+
+class WorkoutPlan(Base):
+    __tablename__ = "workout_plans"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_weeks: Mapped[int] = mapped_column(Integer, default=4)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    exercises: Mapped[list["PlanExercise"]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan",
+        order_by="PlanExercise.day_of_week"
+    )
+
+
+class PlanExercise(Base):
+    __tablename__ = "plan_exercises"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    plan_id: Mapped[str] = mapped_column(ForeignKey("workout_plans.id", ondelete="CASCADE"), index=True)
+    day_of_week: Mapped[int] = mapped_column(Integer)        # 0=Mon … 6=Sun
+    exercise_type: Mapped[str] = mapped_column(String)
+    sets_target: Mapped[int] = mapped_column(Integer, default=3)
+    reps_target: Mapped[int] = mapped_column(Integer, default=10)
+    duration_target_s: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    plan: Mapped["WorkoutPlan"] = relationship(back_populates="exercises")

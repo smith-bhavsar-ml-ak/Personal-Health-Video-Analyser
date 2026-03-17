@@ -19,6 +19,7 @@ class ExerciseSetSchema(BaseModel):
     correct_reps: int
     duration_s: int
     form_score: float
+    rep_scores: list[float] = []
     posture_errors: list[PostureErrorSchema] = []
 
     class Config:
@@ -72,6 +73,7 @@ class SessionResult(BaseModel):
 class VoiceQueryRequest(BaseModel):
     query_text: str | None = None
     audio_b64: str | None = None
+    profile_context: str | None = None
 
 
 class VoiceQueryResponse(BaseModel):
