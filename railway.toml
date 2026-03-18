@@ -1,32 +1,12 @@
-# Railway deployment configuration
-# ─────────────────────────────────────────────────────────────────────────────
-# This repo deploys as TWO Railway services from a single GitHub repository.
+# This file is intentionally minimal — each service has its own railway.toml
+# in its subdirectory.
 #
-# SERVICE 1 — Backend (this file, root of repo)
-#   Railway dashboard → New Service → GitHub repo → set root to /
-#   Dockerfile: backend/Dockerfile
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │  SERVICE          │ Root Directory │ railway.toml location          │
+# ├─────────────────────────────────────────────────────────────────────┤
+# │  Backend (FastAPI) │  /backend      │  backend/railway.toml          │
+# │  Flutter Web       │  /app          │  app/railway.toml              │
+# └─────────────────────────────────────────────────────────────────────┘
 #
-# SERVICE 2 — Web (app/railway.toml)
-#   Railway dashboard → New Service → GitHub repo → set root to /app
-#   Dockerfile: app/Dockerfile
-#
-# ─────────────────────────────────────────────────────────────────────────────
-
-[build]
-builder          = "dockerfile"
-dockerfilePath   = "backend/Dockerfile"
-
-[deploy]
-# Railway injects $PORT — uvicorn must bind to it (not hardcoded 8000)
-startCommand     = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
-healthcheckPath  = "/api/v1/health"
-healthcheckTimeout = 300
-restartPolicyType        = "on_failure"
-restartPolicyMaxRetries  = 3
-
-# ── Required environment variables (set in Railway dashboard) ─────────────────
-# SECRET_KEY          = <random 32-char string>
-# GROQ_API_KEY        = gsk_...   (from console.groq.com)
-# DATABASE_URL        = postgresql://...  (auto-injected by Railway Postgres addon)
-# ALLOWED_ORIGINS     = https://<your-web-service>.railway.app
-# LLM_MODEL           = llama-3.1-8b-instant   (optional, this is the default)
+# In the Railway dashboard for EACH service:
+#   Settings → Source → Root Directory → set to /backend or /app

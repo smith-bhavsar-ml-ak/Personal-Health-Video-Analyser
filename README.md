@@ -717,7 +717,9 @@ PostgreSQL   (Railway Addon — same service as backend)
 
 1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**
 2. Select this repository
-3. Railway auto-detects `railway.toml` at the root and uses `backend/Dockerfile`
+3. **Settings → Source → Root Directory** → set to `/backend`
+   - This makes the build context `backend/` so `COPY requirements.txt .` resolves correctly
+   - Railway then picks up `backend/railway.toml` automatically
 4. Click **Add Plugin** → **PostgreSQL** — Railway injects `DATABASE_URL` automatically
 5. Go to **Variables** and add:
 
