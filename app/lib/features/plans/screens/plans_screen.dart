@@ -7,6 +7,7 @@ import '../../../core/models/workout_plan.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/exercise_helpers.dart';
 import '../providers/plans_provider.dart';
+import '../../../widgets/responsive_grid.dart';
 
 class PlansScreen extends ConsumerWidget {
   const PlansScreen({super.key});
@@ -71,11 +72,14 @@ class PlansScreen extends ConsumerWidget {
           }
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(plansProvider),
-            child: ListView.separated(
+            child: ListView(
               padding: const EdgeInsets.all(16),
-              itemCount: plans.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (_, i) => _PlanCard(plan: plans[i]),
+              children: [
+                ResponsiveGrid(
+                  rowSpacing: 10,
+                  children: plans.map((p) => _PlanCard(plan: p)).toList(),
+                ),
+              ],
             ),
           );
         },

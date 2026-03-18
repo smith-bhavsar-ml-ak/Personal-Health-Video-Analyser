@@ -291,7 +291,162 @@ On mobile/tablet: sidebar collapses to bottom tab bar.
 
 ---
 
-## 14. Anti-Patterns (Never Do)
+## 14. Adaptive Theming (Flutter)
+
+The Flutter app follows **system theme** (`ThemeMode.system`). Do NOT hardcode dark-mode surfaces.
+
+### colorScheme.* substitution table
+| Old hardcoded AppColors | Use instead |
+|-------------------------|-------------|
+| `AppColors.surface` / `AppColors.surfaceDark` | `cs.surface` |
+| `AppColors.border` | `cs.outline` |
+| `AppColors.surfaceElevated` | `cs.surfaceContainerHigh` |
+| `AppColors.textPrimary` | `cs.onSurface` |
+| `AppColors.textSecondary` / `AppColors.textMuted` | `cs.onSurfaceVariant` |
+
+### Brand colors (safe to use directly)
+`AppColors.primary` (#6366F1), `AppColors.health` (#10B981), `AppColors.warning` (#F59E0B), `AppColors.error` (#EF4444), `AppColors.info` (#38BDF8) — these are intentional brand colors and do NOT need to be replaced by colorScheme tokens.
+
+---
+
+## 15. Subscription Tier Tokens
+
+| Tier  | Color token       | Hex      | Usage |
+|-------|-------------------|----------|-------|
+| Free  | `cs.onSurfaceVariant` | adaptive | Neutral — no upsell pressure |
+| Pro   | `AppColors.primary`   | #6366F1  | Highlighted with indigo ring |
+| Elite | `AppColors.health`    | #10B981  | Premium with emerald ring |
+
+### Tier badge
+```
+bg:  tier_color.withValues(alpha: 0.15)
+text: tier_color
+border-radius: 20px
+padding: 3px 10px
+font-weight: 600, 12px
+```
+
+### Paywall card (TierCard)
+```
+border: 2px solid tier_color  (if current plan)
+border: 1px solid cs.outline  (if not current)
+border-radius: 16px
+padding: 16px
+feature list: check_circle_outline icon + bodySmall text
+CTA button: ElevatedButton with backgroundColor: tier_color
+```
+
+---
+
+## 16. Activity & Steps Components
+
+### Steps Banner (home screen)
+```
+container: color.withValues(alpha: 0.08) background, color.withValues(alpha: 0.25) border
+height: auto (compact row)
+progress bar: 5px height, LinearProgressIndicator
+streak badge: warning amber, fire icon, labelMedium 600
+tap target: navigates to /activity
+```
+
+### Steps Ring (activity screen)
+```
+SizedBox 140x140
+CircularProgressIndicator, strokeWidth: 10
+center: step count (headlineMedium bold, brand color) + goal (bodySmall)
+color: AppColors.health if goalReached else AppColors.primary
+```
+
+### Weekly Step Bars (activity screen)
+```
+height: 100px bar area
+bars: health-colored if goal met, primary if not
+day labels: 10px bodySmall below each bar
+no axis lines, no legend
+```
+
+### Activity session tile
+```
+leading: 40x40 rounded icon container, primary.withValues(alpha: 0.1) bg
+distance: health-colored titleSmall (right-aligned)
+steps: bodySmall, onSurfaceVariant (right-aligned below distance)
+```
+
+---
+
+## 17. Share Card Design
+
+Rendered off-screen via RepaintBoundary → PNG → share_plus (3× pixel ratio).
+
+```
+width: 360px
+background: #0F172A (slate-900, always dark — intentional brand card)
+border-radius: 20px
+padding: 24px
+
+header: 36x36 primary icon + "PHVA" bold 18px letter-spacing 1.2
+score: 56px bold health-green + "Form Score" + total reps
+divider: rgba(255,255,255,0.12)
+exercise rows: name left + reps right + score badge
+score badge: color.withValues(alpha: 0.2) bg, colored text, 8px radius
+footer: date left + app name right, rgba(255,255,255,0.38)
+```
+
+---
+
+## 18. Navigation Architecture
+
+### Research basis
+Follows Strava / Strong pattern: **5 direct tabs, no "More" button**, ordered by daily-use frequency.
+- 3–5 tabs is Material Design + HIG consensus
+- Scrollable tab bars are an anti-pattern (users don't expect to scroll)
+- Hamburger menus reduce discoverability; only use for overflow > 5 items
+
+### Mobile — Bottom Tab Bar (5 items)
+| # | Destination | Why primary |
+|---|-------------|-------------|
+| 1 | **Home** | Daily dashboard: streak, steps, recent sessions |
+| 2 | **Analyze** | Core value prop — video upload; gets subtle indigo tint when inactive |
+| 3 | **Activity** | Daily steps/walking — habit loop, opened every day |
+| 4 | **Plans** | Today's workout plan — daily check-in |
+| 5 | **Progress** | Charts/analytics — frequent but secondary to actions |
+
+Active tab indicator: 3px indigo dot above the icon (Strava-style), not a full bg highlight.
+
+Secondary screens reachable within primary tabs:
+- **History** → Home "View All sessions" → `/history`
+- **Library** → Plans screen → `/library`
+- **AI Coach** → Session detail mic button → `/assistant`
+- **Settings** → Profile icon in app bar → `/settings`
+- **Paywall** → Any gated feature → `/paywall?hint=...`
+
+### Desktop — Sidebar (240px, grouped sections)
+```
+[Brand logo + collapse toggle]
+─────────────────────────────
+  Home
+  Analyze  ← subtle indigo bg tint even when inactive (primary CTA)
+─ TRACK ──────────────────────
+  Activity
+  Progress
+  History
+─ PLAN ───────────────────────
+  Plans
+  Library
+─ COACH ──────────────────────
+  AI Coach
+─────────────────────────────
+  Settings  ← above profile footer, subtle
+[Profile footer → /settings]
+```
+
+Section labels: 10px uppercase, `onSurfaceVariant`, letter-spacing 1.0, `FontWeight.w600`.
+Active tile: `cs.primaryContainer` background + `cs.primary` icon/text.
+Inactive Analyze tile: `AppColors.primary.withValues(alpha: 0.07)` bg + `AppColors.primary` icon (always tinted).
+
+---
+
+## 19. Anti-Patterns (Never Do)
 
 - No gradient backgrounds on page or cards
 - No border-radius > 16px on data cards

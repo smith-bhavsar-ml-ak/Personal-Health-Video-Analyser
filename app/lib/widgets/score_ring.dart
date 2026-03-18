@@ -31,7 +31,7 @@ class ScoreRing extends StatelessWidget {
           CircularProgressIndicator(
             value: score / 100,
             strokeWidth: strokeWidth,
-            backgroundColor: AppColors.surfaceElevated,
+            backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
             valueColor: AlwaysStoppedAnimation(_color()),
           ),
           Text(

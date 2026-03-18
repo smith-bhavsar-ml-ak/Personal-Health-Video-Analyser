@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../widgets/responsive_grid.dart';
 
 // ── Static exercise data ──────────────────────────────────────────────────────
 
@@ -200,11 +201,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
           // Exercise list
           Expanded(
-            child: ListView.separated(
+            child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-              itemCount: _filtered.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (_, i) => _ExerciseCard(info: _filtered[i]),
+              children: [
+                ResponsiveGrid(
+                  rowSpacing: 10,
+                  children: _filtered.map((e) => _ExerciseCard(info: e)).toList(),
+                ),
+              ],
             ),
           ),
         ],

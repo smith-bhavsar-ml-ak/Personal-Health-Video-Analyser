@@ -22,7 +22,7 @@ class ScoreBar extends StatelessWidget {
             child: LinearProgressIndicator(
               value: score / 100,
               minHeight: 6,
-              backgroundColor: AppColors.surfaceElevated,
+              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
               valueColor: AlwaysStoppedAnimation(_color()),
             ),
           ),

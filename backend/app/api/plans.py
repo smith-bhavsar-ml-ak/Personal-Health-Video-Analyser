@@ -14,26 +14,29 @@ router = APIRouter()
 
 _DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
-_PLAN_SYSTEM = """You are a certified personal trainer AI. Generate a structured weekly workout plan as JSON.
+_VALID_EXERCISE_TYPES = ["squat", "lunge", "bicep_curl", "jumping_jack", "plank"]
+
+_PLAN_SYSTEM = f"""You are a certified personal trainer AI. Generate a structured weekly workout plan as JSON.
 Return ONLY valid JSON, no markdown, no explanation.
 The JSON must match exactly:
-{
+{{
   "title": "string",
   "description": "string (1-2 sentences)",
   "duration_weeks": integer (2-8),
   "exercises": [
-    {
+    {{
       "day_of_week": integer (0=Mon, 6=Sun),
-      "exercise_type": "string (squat|lunge|bicep_curl|jumping_jack|plank or similar)",
+      "exercise_type": "MUST be one of: {', '.join(_VALID_EXERCISE_TYPES)} — use the exact string, no plurals, no variants",
       "sets_target": integer,
       "reps_target": integer,
       "duration_target_s": integer or null,
       "notes": "string or null"
-    }
+    }}
   ]
-}
+}}
 Schedule 3-5 workout days per week. Rest days have no exercises.
-Vary exercises based on the user's goal, fitness level, and available equipment."""
+Vary exercises based on the user's goal, fitness level, and available equipment.
+IMPORTANT: exercise_type must be exactly one of: {', '.join(_VALID_EXERCISE_TYPES)}"""
 
 
 def _generate_plan_llm(profile: dict) -> dict:
@@ -126,6 +129,12 @@ async def generate_plan(
         }
 
     plan_data = _generate_plan_llm(profile_dict)
+
+    # Sanitise: drop any exercise whose type isn't in the known set
+    plan_data["exercises"] = [
+        ex for ex in plan_data.get("exercises", [])
+        if ex.get("exercise_type") in _VALID_EXERCISE_TYPES
+    ]
 
     plan = await crud.create_plan(
         db,

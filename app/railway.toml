@@ -1,0 +1,22 @@
+# Railway — Flutter Web service
+# ─────────────────────────────────────────────────────────────────────────────
+# In Railway dashboard: New Service → GitHub repo → Root Directory = /app
+# ─────────────────────────────────────────────────────────────────────────────
+
+[build]
+builder        = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+# API_BASE is set as a Railway build variable:
+#   https://<your-backend-service>.railway.app/api/v1
+# Railway passes build args automatically when set as variables.
+
+[deploy]
+# nginx listens on 80 inside the container; Railway maps it to $PORT externally
+startCommand   = "nginx -g 'daemon off;'"
+healthcheckPath = "/"
+healthcheckTimeout = 120
+restartPolicyType = "on_failure"
+
+# ── Required build variable (set in Railway dashboard → Variables) ─────────────
+# API_BASE = https://<your-backend-service>.railway.app/api/v1

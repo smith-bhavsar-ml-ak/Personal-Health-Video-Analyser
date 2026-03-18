@@ -89,11 +89,18 @@ docker-compose up
 ## Design System
 
 All UI changes must follow `design-system/MASTER.md`. Key rules:
-- **Dark mode only.** Primary: Indigo `#6366F1`, health/success: Emerald `#10B981`, warnings: Amber, errors: Red
+- **Adaptive theming — never hardcode dark or light.** The Flutter app defaults to `ThemeMode.system` and respects user preference. Always use `Theme.of(context).colorScheme.*` for surfaces, borders, and text. Never use `AppColors.surface`, `AppColors.border`, `AppColors.surfaceElevated`, `AppColors.textPrimary`, `AppColors.textSecondary`, or `AppColors.textMuted` directly in widgets — these are dark-only values. Brand/semantic colors (`AppColors.primary`, `AppColors.health`, `AppColors.warning`, `AppColors.error`, `AppColors.info`) are identical in both themes and are safe to use directly.
+  - `AppColors.surface` → `cs.surface`
+  - `AppColors.surfaceElevated` → `cs.surfaceContainerHigh`
+  - `AppColors.border` → `cs.outline`
+  - `AppColors.textPrimary` → `cs.onSurface`
+  - `AppColors.textSecondary` / `AppColors.textMuted` → `cs.onSurfaceVariant`
+- **Primary:** Indigo `#6366F1`, health/success: Emerald `#10B981`, warnings: Amber, errors: Red
 - **Layout:** 240px fixed sidebar; fluid main with `max-w-7xl`; mobile sidebar collapses to bottom tab bar
 - **Icons:** Lucide React, 24×24, 1.5px stroke
 - **Charts:** Recharts only
 - **Anti-patterns:** No gradients, no emoji, no glassmorphism, border-radius max 16px on cards
+- **Desktop card layout — MANDATORY:** Any screen that renders a list of cards MUST use `ResponsiveGrid` from `app/lib/widgets/responsive_grid.dart`. This widget renders 3 equal columns on screens ≥ 768 px and a single column on mobile. Never use `GridView`, hardcoded `Column`, or unconstrained `Row` for card lists — always wrap with `ResponsiveGrid`. This applies to all existing and future screens. Exceptions: full-bleed charts, single-item detail views, or explicitly single-column layout (e.g. a narrow form).
 
 Page-specific design specs are in `design-system/pages/`.
 

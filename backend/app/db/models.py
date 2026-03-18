@@ -1,6 +1,6 @@
 import uuid
-from datetime import datetime
-from sqlalchemy import String, Integer, Float, ForeignKey, DateTime, Text, JSON
+from datetime import datetime, date
+from sqlalchemy import String, Integer, Float, ForeignKey, DateTime, Text, JSON, Date, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -20,6 +20,10 @@ class User(Base):
 
     sessions: Mapped[list["WorkoutSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     profile: Mapped["UserProfile | None"] = relationship(back_populates="user", cascade="all, delete-orphan", uselist=False)
+    subscription: Mapped["Subscription | None"] = relationship(back_populates="user", cascade="all, delete-orphan", uselist=False)
+    activity_sessions: Mapped[list["ActivitySession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    daily_step_logs: Mapped[list["DailyStepLog"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    streak: Mapped["Streak | None"] = relationship(back_populates="user", cascade="all, delete-orphan", uselist=False)
 
 
 class WorkoutSession(Base):
@@ -155,3 +159,68 @@ class PlanExercise(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     plan: Mapped["WorkoutPlan"] = relationship(back_populates="exercises")
+
+
+# ── Subscription ──────────────────────────────────────────────────────────────
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True)
+    tier: Mapped[str] = mapped_column(String, default="free")  # free | pro | elite
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    analyses_used_this_month: Mapped[int] = mapped_column(Integer, default=0)
+    analyses_reset_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    user: Mapped["User"] = relationship(back_populates="subscription")
+
+
+# ── Activity tracking ─────────────────────────────────────────────────────────
+
+class ActivitySession(Base):
+    __tablename__ = "activity_sessions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    activity_type: Mapped[str] = mapped_column(String, default="walk")  # walk | run | hike | cycle
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    steps: Mapped[int] = mapped_column(Integer, default=0)
+    distance_m: Mapped[float] = mapped_column(Float, default=0.0)
+    avg_pace_s_per_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    calories_burned: Mapped[float] = mapped_column(Float, default=0.0)
+    polyline: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{lat, lng}, ...]
+
+    user: Mapped["User"] = relationship(back_populates="activity_sessions")
+
+
+class DailyStepLog(Base):
+    __tablename__ = "daily_step_logs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    log_date: Mapped[date] = mapped_column(Date, index=True)
+    steps: Mapped[int] = mapped_column(Integer, default=0)
+    goal: Mapped[int] = mapped_column(Integer, default=8000)
+    calories_burned: Mapped[float] = mapped_column(Float, default=0.0)
+    active_minutes: Mapped[int] = mapped_column(Integer, default=0)
+
+    user: Mapped["User"] = relationship(back_populates="daily_step_logs")
+
+
+# ── Streak & achievements ─────────────────────────────────────────────────────
+
+class Streak(Base):
+    __tablename__ = "streaks"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True)
+    current_streak: Mapped[int] = mapped_column(Integer, default=0)
+    longest_streak: Mapped[int] = mapped_column(Integer, default=0)
+    last_activity_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    total_active_days: Mapped[int] = mapped_column(Integer, default=0)
+
+    user: Mapped["User"] = relationship(back_populates="streak")

@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/exercise_helpers.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../sessions/providers/sessions_provider.dart';
+import '../../activity/providers/activity_provider.dart';
 import '../../../widgets/app_shell.dart';
 import '../../../widgets/exercise_badge.dart';
 import '../../../widgets/score_bar.dart';
@@ -52,6 +53,10 @@ class HomeScreen extends ConsumerWidget {
               children: [
                 // ── Stats row ─────────────────────────────────────────────
                 _StatsRow(sessions: completed),
+                const SizedBox(height: 12),
+
+                // ── Steps + streak banner ──────────────────────────────────
+                const _StepsStreakBanner(),
                 const SizedBox(height: 20),
 
                 // ── Charts (2-col on desktop, stacked on mobile) ──────────
@@ -66,7 +71,7 @@ class HomeScreen extends ConsumerWidget {
                       const SizedBox(height: 20),
                     ],
                   ] else ...[
-                    // Exercise breakdown | Weekly activity side-by-side
+                    // 3-column grid: Exercise breakdown | Weekly activity | Form trend
                     IntrinsicHeight(
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -74,23 +79,14 @@ class HomeScreen extends ConsumerWidget {
                           Expanded(child: _ExerciseBreakdown(sessions: completed)),
                           const SizedBox(width: 16),
                           Expanded(child: _WeeklyActivity(sessions: completed)),
+                          if (completed.length >= 3) ...[
+                            const SizedBox(width: 16),
+                            Expanded(child: _FormScoreTrend(sessions: completed)),
+                          ],
                         ],
                       ),
                     ),
                     const SizedBox(height: 20),
-                    // Form score trend — half width on desktop
-                    if (completed.length >= 3) ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _FormScoreTrend(sessions: completed),
-                          ),
-                          const SizedBox(width: 16),
-                          const Expanded(child: SizedBox.shrink()),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                    ],
                   ],
                 ],
 
@@ -114,11 +110,13 @@ class HomeScreen extends ConsumerWidget {
                     actionLabel: 'Analyze Video',
                     onAction: () => context.go('/analyze'),
                   )
-                else
+                else if (isMobile)
                   for (final s in completed.take(3)) ...[
                     _SessionCard(session: s),
                     const SizedBox(height: 10),
-                  ],
+                  ]
+                else
+                  _SessionGrid(sessions: completed.take(3).toList()),
               ],
             ),
           );
@@ -131,6 +129,93 @@ class HomeScreen extends ConsumerWidget {
     if (email == null) return 'there';
     final local = email.split('@').first;
     return local[0].toUpperCase() + local.substring(1);
+  }
+}
+
+// ── Steps + streak banner ─────────────────────────────────────────────────────
+
+class _StepsStreakBanner extends ConsumerWidget {
+  const _StepsStreakBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stepsAsync = ref.watch(todayStepsProvider);
+    final cs = Theme.of(context).colorScheme;
+
+    return stepsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (steps) {
+        final color = steps.goalReached ? AppColors.health : AppColors.primary;
+        return GestureDetector(
+          onTap: () => context.go('/activity'),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.directions_walk, size: 20, color: color),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${steps.steps.toStringAsFixed(0)} / ${steps.goal} steps today',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(color: color),
+                      ),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: steps.progress,
+                          minHeight: 5,
+                          backgroundColor: color.withValues(alpha: 0.15),
+                          valueColor: AlwaysStoppedAnimation<Color>(color),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.local_fire_department, size: 14, color: AppColors.warning),
+                        const SizedBox(width: 3),
+                        Text(
+                          '${steps.currentStreak}d streak',
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: AppColors.warning,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${steps.caloriesBurned.round()} kcal',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right, size: 16, color: cs.onSurfaceVariant),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -467,7 +552,7 @@ class _SessionCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     return GestureDetector(
-      onTap: () => context.go('/sessions/${session.id}'),
+      onTap: () => context.go('/sessions/${session.id}?from=/'),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -506,6 +591,31 @@ class _SessionCard extends StatelessWidget {
     final m = s ~/ 60;
     final sec = s % 60;
     return m > 0 ? '${m}m ${sec}s' : '${s}s';
+  }
+}
+
+// ── Desktop 3-column session grid ────────────────────────────────────────────
+
+class _SessionGrid extends StatelessWidget {
+  final List<SessionSummary> sessions;
+  const _SessionGrid({required this.sessions});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = List<Widget>.generate(3, (i) {
+      if (i < sessions.length) return _SessionCard(session: sessions[i]);
+      return const SizedBox.shrink();
+    });
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: items[0]),
+        const SizedBox(width: 12),
+        Expanded(child: items[1]),
+        const SizedBox(width: 12),
+        Expanded(child: items[2]),
+      ],
+    );
   }
 }
 

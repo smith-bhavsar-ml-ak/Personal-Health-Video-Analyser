@@ -19,8 +19,8 @@ numpy==1.26.4
 torch==2.4.1
 torchvision==0.19.1
 
-# LLM
-ollama==0.3.3
+# LLM (Groq — OpenAI-compatible hosted inference, replaces local Ollama)
+openai>=1.40.0
 
 # Voice
 openai-whisper>=20240930

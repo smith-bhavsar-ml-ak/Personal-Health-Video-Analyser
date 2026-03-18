@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../storage/secure_storage.dart';
 
 class ThemeModeNotifier extends StateNotifier<ThemeMode> {
-  ThemeModeNotifier() : super(ThemeMode.dark) {
+  ThemeModeNotifier() : super(ThemeMode.system) {
     _load();
   }
 
@@ -21,7 +21,7 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
     switch (raw) {
       case 'light':  return ThemeMode.light;
       case 'system': return ThemeMode.system;
-      default:       return ThemeMode.dark;
+      default:       return ThemeMode.system;
     }
   }
 

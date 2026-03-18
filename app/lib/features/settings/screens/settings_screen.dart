@@ -1,7 +1,11 @@
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:health/health.dart';
+import '../../../core/api/api_service.dart';
 import '../../../core/api/client.dart';
 import '../../../core/storage/secure_storage.dart';
 import '../../../core/theme/app_theme.dart';
@@ -10,6 +14,8 @@ import '../../../core/models/user_profile.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../profile/providers/profile_provider.dart';
 import '../../profile/screens/edit_profile_screen.dart';
+import '../../subscription/providers/subscription_provider.dart';
+import '../../../core/models/subscription.dart';
 import '../../../widgets/app_shell.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -19,20 +25,99 @@ class SettingsScreen extends ConsumerStatefulWidget {
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
+// Step goal presets (steps/day)
+const _stepGoalOptions = [4000, 6000, 8000, 10000, 12000, 15000];
+const _kStepGoalKey = 'daily_step_goal';
+
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _urlCtrl = TextEditingController();
   bool _saving = false;
+
+  // Activity settings
+  int _stepGoal = 8000;
+  bool _healthSyncEnabled = false;
+  bool _healthSyncAvailable = false;
 
   @override
   void initState() {
     super.initState();
     _loadUrl();
+    _loadActivitySettings();
   }
 
   Future<void> _loadUrl() async {
     final url = await SecureStorage.instance.readServerUrl();
     _urlCtrl.text = url ?? 'http://localhost';
   }
+
+  Future<void> _loadActivitySettings() async {
+    int goal = 8000;
+    bool available = false;
+    bool syncEnabled = false;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      goal = prefs.getInt(_kStepGoalKey) ?? 8000;
+      if (!kIsWeb && Platform.isIOS) {
+        available = true;
+        syncEnabled = prefs.getBool('health_sync_enabled') ?? false;
+      }
+    } catch (_) {
+      // SharedPreferences unavailable (e.g. first run on web before pub get)
+      // Fall through with defaults
+    }
+
+    if (mounted) {
+      setState(() {
+        _stepGoal = goal;
+        _healthSyncAvailable = available;
+        _healthSyncEnabled = syncEnabled;
+      });
+    }
+  }
+
+  Future<void> _saveStepGoal(int goal) async {
+    setState(() => _stepGoal = goal);
+
+    // Persist locally
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_kStepGoalKey, goal);
+    } catch (_) {}
+
+    // Sync to backend
+    try {
+      await ApiService.instance.updateStepGoal(goal);
+    } catch (_) {}
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Daily step goal updated to ${_fmtSteps(goal)}')),
+    );
+  }
+
+  Future<void> _toggleHealthSync(bool enabled) async {
+    if (enabled) {
+      final health = Health();
+      final types = [HealthDataType.STEPS, HealthDataType.ACTIVE_ENERGY_BURNED];
+      final granted = await health.requestAuthorization(types);
+      if (!granted) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Health access was not granted. Check Settings > Health > PHVA.')),
+        );
+        return;
+      }
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('health_sync_enabled', enabled);
+    } catch (_) {}
+    setState(() => _healthSyncEnabled = enabled);
+  }
+
+  static String _fmtSteps(int n) =>
+      n >= 1000 ? '${(n / 1000).toStringAsFixed(0)}k' : '$n';
 
   Future<void> _saveUrl() async {
     final url = _urlCtrl.text.trim();
@@ -75,11 +160,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final themeMode = ref.watch(themeModeProvider);
-    final email     = ref.watch(authProvider).email;
-    final profile   = ref.watch(profileProvider);
-    final cs        = Theme.of(context).colorScheme;
-    final isMobile  = MediaQuery.of(context).size.width < 768;
+    final themeMode    = ref.watch(themeModeProvider);
+    final email        = ref.watch(authProvider).email;
+    final profile      = ref.watch(profileProvider);
+    final subAsync     = ref.watch(subscriptionProvider);
+    final cs           = Theme.of(context).colorScheme;
+    final isMobile     = MediaQuery.of(context).size.width < 768;
 
     return Scaffold(
       appBar: AppBar(
@@ -90,34 +176,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           _ProfileCard(profile: profile, email: email),
-          const SizedBox(height: 16),
-
-          const _SectionHeader('Appearance'),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: cs.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: cs.outline),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.palette_outlined, size: 20, color: cs.onSurfaceVariant),
-                    const SizedBox(width: 10),
-                    Text('Theme', style: Theme.of(context).textTheme.labelLarge),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                _ThemeToggle(
-                  current: themeMode,
-                  onChanged: (m) => ref.read(themeModeProvider.notifier).setMode(m),
-                ),
-              ],
-            ),
-          ),
           const SizedBox(height: 16),
 
           if (!kIsWeb) ...[
@@ -160,6 +218,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const SizedBox(height: 16),
           ],
+
+          const _SectionHeader('Subscription'),
+          _SubscriptionCard(subAsync: subAsync),
+          const SizedBox(height: 16),
+
+          const _SectionHeader('Activity'),
+          _ActivitySettingsCard(
+            stepGoal: _stepGoal,
+            onStepGoalChanged: _saveStepGoal,
+            healthSyncAvailable: _healthSyncAvailable,
+            healthSyncEnabled: _healthSyncEnabled,
+            onHealthSyncChanged: _toggleHealthSync,
+          ),
+          const SizedBox(height: 16),
+
+          const _SectionHeader('Appearance'),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: cs.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: cs.outline),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.palette_outlined, size: 20, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 10),
+                    Text('Theme', style: Theme.of(context).textTheme.labelLarge),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _ThemeToggle(
+                  current: themeMode,
+                  onChanged: (m) => ref.read(themeModeProvider.notifier).setMode(m),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
 
           const _SectionHeader('Danger Zone'),
           ListTile(
@@ -456,6 +556,274 @@ class _InfoChip extends StatelessWidget {
           ],
         ),
       );
+}
+
+// ── Subscription card ─────────────────────────────────────────────────────────
+
+class _SubscriptionCard extends StatelessWidget {
+  final AsyncValue<SubscriptionInfo> subAsync;
+  const _SubscriptionCard({required this.subAsync});
+
+  static const _tierColors = {
+    'free':  Color(0xFF94A3B8), // slate — neutral
+    'pro':   AppColors.primary,
+    'elite': AppColors.health,
+  };
+
+  static const _tierLabels = {
+    'free':  'Free',
+    'pro':   'Pro',
+    'elite': 'Elite',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outline),
+      ),
+      child: subAsync.when(
+        loading: () => const SizedBox(
+          height: 56,
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+        error: (_, __) => Text(
+          'Could not load subscription info.',
+          style: TextStyle(color: cs.onSurfaceVariant),
+        ),
+        data: (sub) {
+          final color = _tierColors[sub.tier] ?? AppColors.primary;
+          final label = _tierLabels[sub.tier] ?? sub.tier.toUpperCase();
+          final isPaid = sub.tier != 'free';
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Tier row ─────────────────────────────────────────────
+              Row(
+                children: [
+                  // Tier badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: color.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    isPaid ? 'Active plan' : 'Free plan',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => context.push('/paywall'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(isPaid ? 'Manage plan' : 'Upgrade'),
+                  ),
+                ],
+              ),
+
+              // ── Usage bar (only if limited) ───────────────────────────
+              if (!sub.isUnlimited) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: sub.usageRatio,
+                          minHeight: 6,
+                          backgroundColor: cs.outline.withValues(alpha: 0.3),
+                          valueColor: AlwaysStoppedAnimation(
+                            sub.usageRatio >= 0.9 ? AppColors.error : color,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      '${sub.analysesUsed} / ${sub.analysesLimit} analyses',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+                if (sub.usageRatio >= 0.9) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    sub.canAnalyze
+                        ? 'Almost at your monthly limit — upgrade for more.'
+                        : 'Monthly limit reached. Upgrade to continue.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: sub.canAnalyze ? AppColors.warning : AppColors.error,
+                        ),
+                  ),
+                ],
+              ] else ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.all_inclusive, size: 14, color: color),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Unlimited analyses',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Activity settings card ────────────────────────────────────────────────────
+
+class _ActivitySettingsCard extends StatelessWidget {
+  final int stepGoal;
+  final ValueChanged<int> onStepGoalChanged;
+  final bool healthSyncAvailable;
+  final bool healthSyncEnabled;
+  final ValueChanged<bool> onHealthSyncChanged;
+
+  const _ActivitySettingsCard({
+    required this.stepGoal,
+    required this.onStepGoalChanged,
+    required this.healthSyncAvailable,
+    required this.healthSyncEnabled,
+    required this.onHealthSyncChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Daily step goal ────────────────────────────────────────────
+          Row(
+            children: [
+              Icon(Icons.directions_walk_outlined, size: 20, color: cs.onSurfaceVariant),
+              const SizedBox(width: 10),
+              Text('Daily Step Goal', style: Theme.of(context).textTheme.labelLarge),
+              const Spacer(),
+              Text(
+                stepGoal >= 1000
+                    ? '${(stepGoal / 1000).toStringAsFixed(0)}k steps'
+                    : '$stepGoal steps',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _stepGoalOptions.map((goal) {
+              final selected = goal == stepGoal;
+              final label = goal >= 1000
+                  ? '${(goal / 1000).toStringAsFixed(0)}k'
+                  : '$goal';
+              return ChoiceChip(
+                label: Text(label),
+                selected: selected,
+                onSelected: (_) => onStepGoalChanged(goal),
+                selectedColor: AppColors.primary.withValues(alpha: 0.18),
+                checkmarkColor: AppColors.primary,
+                labelStyle: TextStyle(
+                  color: selected ? AppColors.primary : cs.onSurfaceVariant,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  fontSize: 13,
+                ),
+                side: BorderSide(
+                  color: selected ? AppColors.primary : cs.outline,
+                ),
+              );
+            }).toList(),
+          ),
+
+          if (healthSyncAvailable) ...[
+            const SizedBox(height: 16),
+            Divider(color: cs.outline),
+            const SizedBox(height: 8),
+            // ── HealthKit sync ─────────────────────────────────────────
+            Row(
+              children: [
+                Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: AppColors.health.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.favorite_outline, size: 18, color: AppColors.health),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Sync with Apple Health',
+                          style: Theme.of(context).textTheme.labelLarge),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Import steps and calories from the Health app',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: healthSyncEnabled,
+                  onChanged: onHealthSyncChanged,
+                  activeThumbColor: AppColors.health,
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 // ── Theme toggle ──────────────────────────────────────────────────────────────

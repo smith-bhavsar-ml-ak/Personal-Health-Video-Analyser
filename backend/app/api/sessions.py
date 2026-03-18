@@ -54,13 +54,26 @@ async def _run_analysis_background(session_id: str, content: bytes, filename: st
 
             logger.info("[BG:%s] [4/4] Persisting results...", session_id)
             aggregated = aggregate_results(exercise_results)
-            await crud.update_session_completed(
+            completed_session = await crud.update_session_completed(
                 db=db,
                 session_id=session_id,
                 duration_s=int(meta.duration_s),
                 exercise_sets=aggregated["exercise_sets"],
                 feedback_text=feedback_text,
             )
+
+            # Auto-progress: mark matching plan exercises for today as done
+            if completed_session and completed_session.user_id:
+                exercise_types = [es["exercise_type"] for es in aggregated["exercise_sets"]]
+                auto_done = await crud.auto_complete_plan_exercises(
+                    db, completed_session.user_id, exercise_types
+                )
+                if auto_done:
+                    logger.info("[BG:%s] Auto-completed %d plan exercise(s)", session_id, auto_done)
+
+                # Increment monthly usage counter
+                await crud.increment_analysis_usage(db, completed_session.user_id)
+
             logger.info("[BG:%s] Done — total=%.2fs", session_id, time.perf_counter() - t_total)
 
         except Exception as e:
@@ -79,6 +92,15 @@ async def analyze_video(
 ):
     if not video.content_type or not video.content_type.startswith("video/"):
         raise HTTPException(status_code=400, detail="File must be a video")
+
+    # Subscription quota check
+    quota = await crud.check_analysis_quota(db, current_user.id)
+    if not quota["allowed"]:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Monthly analysis limit reached ({quota['used']}/{quota['limit']}). "
+                   f"Upgrade to Pro or Elite for more analyses.",
+        )
 
     content = await video.read()
     filename = video.filename or "video.mp4"

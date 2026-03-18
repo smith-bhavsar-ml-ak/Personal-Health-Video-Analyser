@@ -306,7 +306,7 @@ class _ResultsView extends StatelessWidget {
             TextButton.icon(
               icon: const Icon(Icons.open_in_new, size: 16),
               label: const Text('Full Detail'),
-              onPressed: () => context.go('/sessions/${session.id}'),
+              onPressed: () => context.go('/sessions/${session.id}?from=/analyze'),
             ),
           ],
         ),

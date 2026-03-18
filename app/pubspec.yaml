@@ -50,6 +50,19 @@ dependencies:
   # Sharing
   share_plus: ^12.0.1
 
+  # Activity tracking (pedometer + GPS)
+  pedometer: ^4.0.2
+  geolocator: ^14.0.0
+
+  # Render widget to image (share card)
+  screenshot: ^3.0.0
+
+  # Local preferences (step goal, settings)
+  shared_preferences: ^2.3.0
+
+  # iOS HealthKit / Android Health Connect integration
+  health: ^12.2.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

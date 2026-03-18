@@ -19,15 +19,14 @@ services:
     build: ./backend
     container_name: phva-backend
     environment:
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
       - DATABASE_URL=postgresql://phva:${POSTGRES_PASSWORD}@postgres:5432/phva
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost}
-      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-30}
+      - GROQ_API_KEY=${GROQ_API_KEY:?GROQ_API_KEY is required}
+      - LLM_MODEL=${LLM_MODEL:-llama-3.1-8b-instant}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-30}
       - MAX_VIDEO_SIZE_MB=${MAX_VIDEO_SIZE_MB:-200}
       - ANALYZE_RATE_LIMIT=${ANALYZE_RATE_LIMIT:-10/minute}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -36,8 +35,12 @@ services:
   flutter-web:
     build:
       context: ./app
+      args:
+        # Leave blank to use relative /api/v1 (nginx proxy on same origin).
+        # Set to full backend URL for separate-service deployments:
+        #   API_BASE=https://phva-backend.railway.app/api/v1
+        API_BASE: ${API_BASE:-}
     container_name: phva-flutter-web
-    # No runtime env vars — static SPA, all API calls go through nginx → backend
     depends_on:
       - backend
     restart: unless-stopped

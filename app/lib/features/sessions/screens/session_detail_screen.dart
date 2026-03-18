@@ -2,36 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart' show Share;
 import '../../../core/models/session_result.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/sessions_provider.dart';
 import '../../../widgets/ai_feedback_panel.dart';
 import '../../../widgets/exercise_card.dart';
+import '../../../widgets/share_card.dart';
+import '../../../widgets/responsive_grid.dart';
 
-void _shareSession(BuildContext context, SessionResult s) {
-  final date = DateFormat('MMM d, yyyy').format(
-      DateTime.tryParse(s.createdAt) ?? DateTime.now());
-  final exercises = s.exerciseSets
-      .map((e) => e.exerciseType.replaceAll('_', ' '))
-      .toSet()
-      .join(', ');
-  final lines = [
-    'Workout — $date',
-    'Form Score: ${s.avgFormScore.toStringAsFixed(0)}%',
-    'Total Reps: ${s.totalReps}',
-    if (exercises.isNotEmpty) 'Exercises: $exercises',
-    if (s.durationS != null)
-      'Duration: ${s.durationS! ~/ 60}m ${s.durationS! % 60}s',
-    '',
-    'Tracked with Personal Health Video Analyzer',
-  ];
-  Share.share(lines.join('\n'));
-}
+Future<void> _shareSession(BuildContext context, SessionResult s) =>
+    shareSessionCard(context, s);
 
 class SessionDetailScreen extends ConsumerWidget {
   final String sessionId;
-  const SessionDetailScreen({required this.sessionId, super.key});
+  final String? from;
+  const SessionDetailScreen({required this.sessionId, this.from, super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -40,7 +25,7 @@ class SessionDetailScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Session Details'),
-        leading: BackButton(onPressed: () => context.go('/history')),
+        leading: BackButton(onPressed: () => context.go(from ?? '/history')),
         actions: [
           IconButton(
             icon: const Icon(Icons.share_outlined),
@@ -133,10 +118,12 @@ class _SessionDetailBody extends StatelessWidget {
           Text('Exercises',
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
-          for (final s in session.exerciseSets) ...[
-            ExerciseCard(set: s, repScores: s.formScore > 0 ? null : null),
-            const SizedBox(height: 10),
-          ],
+          ResponsiveGrid(
+            rowSpacing: 10,
+            children: session.exerciseSets
+                .map((s) => ExerciseCard(set: s, repScores: s.formScore > 0 ? null : null))
+                .toList(),
+          ),
           const SizedBox(height: 8),
         ],
 
@@ -180,13 +167,15 @@ class _StatCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Expanded(
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Expanded(
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: cs.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: cs.outline),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,6 +190,7 @@ class _StatCard extends StatelessWidget {
           ),
         ),
       );
+  }
 }
 
 class _VoiceQueryTile extends StatelessWidget {
@@ -208,48 +198,49 @@ class _VoiceQueryTile extends StatelessWidget {
   const _VoiceQueryTile({required this.query});
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.person_outline,
-                    size: 16, color: AppColors.textMuted),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    query.queryText as String,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textPrimary,
-                    ),
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.person_outline, size: 16, color: cs.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  query.queryText as String,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurface,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Divider(height: 1),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.auto_awesome,
-                    size: 16, color: AppColors.primary),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    query.responseText as String,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Divider(height: 1),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome, size: 16, color: AppColors.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  query.responseText as String,
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
-              ],
-            ),
-          ],
-        ),
-      );
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

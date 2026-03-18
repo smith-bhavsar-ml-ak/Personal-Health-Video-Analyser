@@ -24,11 +24,12 @@ class _ExerciseCardState extends State<ExerciseCard> {
     final s = widget.set;
     final color = getExerciseColor(s.exerciseType);
 
+    final cs = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: cs.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: cs.outline),
       ),
       child: Column(
         children: [
@@ -45,7 +46,7 @@ class _ExerciseCardState extends State<ExerciseCard> {
                   _StatChip(
                     icon: Icons.repeat,
                     label: '${s.repCount} reps',
-                    color: AppColors.textSecondary,
+                    color: cs.onSurfaceVariant,
                   ),
                   const SizedBox(width: 12),
                   ScoreRing(score: s.formScore, size: 44, strokeWidth: 4),
@@ -54,7 +55,7 @@ class _ExerciseCardState extends State<ExerciseCard> {
                     _expanded
                         ? Icons.keyboard_arrow_up
                         : Icons.keyboard_arrow_down,
-                    color: AppColors.textMuted,
+                    color: cs.onSurfaceVariant,
                     size: 20,
                   ),
                 ],
@@ -64,7 +65,7 @@ class _ExerciseCardState extends State<ExerciseCard> {
 
           // Expanded details
           if (_expanded) ...[
-            const Divider(height: 1, color: AppColors.border),
+            Divider(height: 1, color: cs.outline),
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -167,27 +168,29 @@ class _StatTile extends StatelessWidget {
   const _StatTile({required this.label, required this.value, this.color});
 
   @override
-  Widget build(BuildContext context) => Expanded(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceElevated,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 2),
-              Text(value,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: color ?? AppColors.textPrimary,
-                  )),
-            ],
-          ),
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(8),
         ),
-      );
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 2),
+            Text(value,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: color ?? cs.onSurface,
+                )),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PostureErrorRow extends StatelessWidget {
@@ -222,9 +225,7 @@ class _PostureErrorRow extends StatelessWidget {
               children: [
                 Text(
                   error.errorType.replaceAll('_', ' '),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textPrimary,
-                  ),
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 Text(
                   '${error.occurrences}× · ${error.severity} severity',
@@ -270,6 +271,7 @@ class _RepScoreChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mutedColor = Theme.of(context).colorScheme.onSurfaceVariant;
     return BarChart(
       BarChartData(
         maxY: 100,
@@ -300,8 +302,7 @@ class _RepScoreChart extends StatelessWidget {
               reservedSize: 20,
               getTitlesWidget: (v, _) => Text(
                 'R${v.toInt() + 1}',
-                style: const TextStyle(
-                    fontSize: 10, color: AppColors.textMuted),
+                style: TextStyle(fontSize: 10, color: mutedColor),
               ),
             ),
           ),

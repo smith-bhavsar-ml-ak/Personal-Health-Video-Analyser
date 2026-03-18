@@ -14,7 +14,7 @@ AI-powered fitness coaching app that analyzes exercise form from video, tracks p
    - 5.1 [Auth & Users](#51-auth--users)
    - 5.2 [Video Analysis Pipeline](#52-video-analysis-pipeline)
    - 5.3 [BiLSTM Exercise Classifier](#53-bilstm-exercise-classifier)
-   - 5.4 [LLM Coaching (Ollama)](#54-llm-coaching-ollama)
+   - 5.4 [LLM Coaching (Groq)](#54-llm-coaching-groq)
    - 5.5 [Voice Assistant (STT / TTS)](#55-voice-assistant-stt--tts)
    - 5.6 [Progress Tracking API](#56-progress-tracking-api)
    - 5.7 [Workout Plans API](#57-workout-plans-api)
@@ -660,12 +660,14 @@ The server URL is stored in device secure storage and set from the Settings scre
 ### Development
 
 ```bash
+# Copy .env.example and fill in GROQ_API_KEY (get one free at console.groq.com)
+cp .env.example .env
 docker-compose -f docker-compose.dev.yml up
 ```
 
 - Backend mounted as volume with `--reload` (hot reload on file changes)
 - PostgreSQL with persistent volume
-- Ollama must be running on the host machine at port 11434
+- LLM inference via Groq API (set `GROQ_API_KEY` in `.env`)
 
 Run migrations after first start:
 ```bash
@@ -681,25 +683,87 @@ flutter run -d ios          # iOS simulator
 flutter run -d android      # Android emulator
 ```
 
-### Production
+### Production (self-hosted)
 
 ```bash
-# Requires .env with POSTGRES_PASSWORD and SECRET_KEY
+# Requires .env with POSTGRES_PASSWORD, SECRET_KEY, GROQ_API_KEY
 docker-compose up --build
-docker exec <backend-container> alembic upgrade head
-```
-
-Production stack adds Nginx as a reverse proxy: `/api/` → `backend:8000`, `/` → Flutter web build served as SPA.
-
-**Build Flutter web for production:**
-```bash
-cd app && flutter build web --release
-# Output in app/build/web/ — copy into Nginx static root
+docker exec phva-backend alembic upgrade head
 ```
 
 ---
 
-## 11. Development Commands
+## 11. Deployment — Railway + Groq
+
+### Architecture
+
+```
+Flutter Web  (Railway Service 2)
+     │  HTTPS  https://phva-web.railway.app
+     │
+     ▼
+FastAPI      (Railway Service 1)   ←→  Groq API (LLM)
+     │  postgresql://
+     ▼
+PostgreSQL   (Railway Addon — same service as backend)
+```
+
+### Step 1 — Get a free Groq API key
+
+1. Go to [console.groq.com](https://console.groq.com) → Sign up (free)
+2. **API Keys** → **Create API Key** → copy it (`gsk_...`)
+
+### Step 2 — Deploy the Backend to Railway
+
+1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**
+2. Select this repository
+3. Railway auto-detects `railway.toml` at the root and uses `backend/Dockerfile`
+4. Click **Add Plugin** → **PostgreSQL** — Railway injects `DATABASE_URL` automatically
+5. Go to **Variables** and add:
+
+   | Variable | Value |
+   |----------|-------|
+   | `SECRET_KEY` | any random 32-char string |
+   | `GROQ_API_KEY` | `gsk_...` from Step 1 |
+   | `ALLOWED_ORIGINS` | `https://<your-web-service>.railway.app` (add after Step 3) |
+
+6. Deploy — Railway builds and runs the backend
+7. Copy your backend URL, e.g. `https://phva-backend-production.railway.app`
+8. In the Railway shell (or via CLI): `railway run alembic upgrade head`
+
+### Step 3 — Deploy the Flutter Web App to Railway
+
+1. In the same Railway project, click **New Service** → **GitHub repo** (same repo)
+2. Set **Root Directory** to `/app`
+3. Railway picks up `app/railway.toml` and uses `app/Dockerfile`
+4. Go to **Variables** and add:
+
+   | Variable | Value |
+   |----------|-------|
+   | `API_BASE` | `https://phva-backend-production.railway.app/api/v1` |
+
+5. Deploy — Railway builds Flutter web (~10 min first build) and serves it via nginx
+6. Go back to the backend service → Variables → update `ALLOWED_ORIGINS` to this web service URL
+
+### Step 4 — Mobile App
+
+No server needed for the Flutter mobile app. Set the backend URL in the app:
+
+- iOS/Android: **Settings → Backend Server URL** → enter `https://phva-backend-production.railway.app`
+
+### Cost estimate
+
+| Service | Free tier |
+|---------|-----------|
+| Railway Backend | ~$0–2/month (within $5 free credit) |
+| Railway Postgres | Included in $5 credit |
+| Railway Flutter Web | ~$0–2/month (within $5 credit) |
+| Groq LLM | Free tier: 14,400 requests/day |
+| **Total** | **$0/month** for low traffic |
+
+---
+
+## 12. Development Commands
 
 ### Backend
 

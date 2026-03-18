@@ -16,6 +16,8 @@ import 'features/profile/screens/edit_profile_screen.dart';
 import 'features/progress/screens/progress_screen.dart';
 import 'features/plans/screens/plans_screen.dart';
 import 'features/library/screens/library_screen.dart';
+import 'features/activity/screens/activity_screen.dart';
+import 'features/subscription/screens/paywall_screen.dart';
 import 'widgets/app_shell.dart';
 
 /// Bridges Riverpod auth state → GoRouter refreshListenable.
@@ -59,6 +61,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
             path: '/sessions/:id',
             builder: (_, state) => SessionDetailScreen(
               sessionId: state.pathParameters['id']!,
+              from: state.uri.queryParameters['from'],
             ),
           ),
           GoRoute(path: '/assistant', builder: (_, __) => const AssistantScreen()),
@@ -71,6 +74,13 @@ final _routerProvider = Provider<GoRouter>((ref) {
             builder: (_, state) => PlanDetailScreen(planId: state.pathParameters['id']!),
           ),
           GoRoute(path: '/library',       builder: (_, __) => const LibraryScreen()),
+          GoRoute(path: '/activity',      builder: (_, __) => const ActivityScreen()),
+          GoRoute(
+            path: '/paywall',
+            builder: (_, state) => PaywallScreen(
+              featureHint: state.uri.queryParameters['hint'],
+            ),
+          ),
         ],
       ),
     ],

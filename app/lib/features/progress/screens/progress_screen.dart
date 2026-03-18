@@ -40,7 +40,8 @@ class _ProgressScreenState extends ConsumerState<ProgressScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final cs        = Theme.of(context).colorScheme;
+    final isDesktop = MediaQuery.of(context).size.width >= 768;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Progress')),
@@ -93,16 +94,39 @@ class _ProgressScreenState extends ConsumerState<ProgressScreen> {
             ]),
             const SizedBox(height: 20),
 
-            // ── Weight history chart ───────────────────────────────────────
-            _SectionTitle('Weight Over Time'),
-            const SizedBox(height: 8),
-            _WeightChart(ref: ref),
-            const SizedBox(height: 20),
-
-            // ── Form score trend ──────────────────────────────────────────
-            _SectionTitle('Form Score Trend'),
-            const SizedBox(height: 8),
-            _FormTrendChart(ref: ref),
+            // ── Charts: 2-col on desktop, stacked on mobile ───────────────
+            if (isDesktop) ...[
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        _SectionTitle('Weight Over Time'),
+                        const SizedBox(height: 8),
+                        Expanded(child: _WeightChart(ref: ref)),
+                      ]),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        _SectionTitle('Form Score Trend'),
+                        const SizedBox(height: 8),
+                        Expanded(child: _FormTrendChart(ref: ref)),
+                      ]),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              _SectionTitle('Weight Over Time'),
+              const SizedBox(height: 8),
+              _WeightChart(ref: ref),
+              const SizedBox(height: 20),
+              _SectionTitle('Form Score Trend'),
+              const SizedBox(height: 8),
+              _FormTrendChart(ref: ref),
+            ],
             const SizedBox(height: 20),
 
             // ── Exercise breakdown ────────────────────────────────────────
@@ -332,15 +356,42 @@ class _ExerciseBreakdown extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDesktop = MediaQuery.of(context).size.width >= 768;
     final async = ref.watch(exerciseStatsProvider);
     return async.when(
       loading: () => const _ChartSkeleton(),
       error: (_, __) => const SizedBox.shrink(),
       data: (stats) {
         if (stats.isEmpty) return const _ChartEmpty(message: 'No exercise data yet.');
-        return Column(
-          children: stats.map((s) => _ExerciseStatRow(stat: s)).toList(),
-        );
+        if (!isDesktop) {
+          return Column(
+            children: stats.map((s) => _ExerciseStatRow(stat: s)).toList(),
+          );
+        }
+        // Desktop: 3-column grid
+        final rows = <Widget>[];
+        for (var i = 0; i < stats.length; i += 3) {
+          final chunk = stats.skip(i).take(3).toList();
+          rows.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var j = 0; j < 3; j++) ...[
+                    Expanded(
+                      child: j < chunk.length
+                          ? _ExerciseStatRow(stat: chunk[j], noBottomMargin: true)
+                          : const SizedBox.shrink(),
+                    ),
+                    if (j < 2) const SizedBox(width: 12),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }
+        return Column(children: rows);
       },
     );
   }
@@ -348,7 +399,8 @@ class _ExerciseBreakdown extends ConsumerWidget {
 
 class _ExerciseStatRow extends StatelessWidget {
   final ExerciseStat stat;
-  const _ExerciseStatRow({required this.stat});
+  final bool noBottomMargin;
+  const _ExerciseStatRow({required this.stat, this.noBottomMargin = false});
 
   @override
   Widget build(BuildContext context) {
@@ -359,7 +411,7 @@ class _ExerciseStatRow extends StatelessWidget {
         .join(' ');
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: noBottomMargin ? EdgeInsets.zero : const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,

@@ -154,4 +154,95 @@ class ApiService {
   Future<void> deletePlan(String id) async {
     await _dio.delete<void>('/plans/$id');
   }
+
+  // ── Subscriptions ───────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getSubscription() async {
+    final res = await _dio.get<Map<String, dynamic>>('/subscriptions/me');
+    return res.data!;
+  }
+
+  Future<Map<String, dynamic>> upgradeTier(String tier) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/subscriptions/upgrade',
+      data: {'tier': tier},
+    );
+    return res.data!;
+  }
+
+  // ── Activity / Steps ────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getTodaySteps() async {
+    final res = await _dio.get<Map<String, dynamic>>('/activity/steps/today');
+    return res.data!;
+  }
+
+  Future<List<Map<String, dynamic>>> getStepHistory({int days = 7}) async {
+    final res = await _dio.get<List<dynamic>>(
+      '/activity/steps/history',
+      queryParameters: {'days': days},
+    );
+    return res.data!.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> syncSteps({
+    required int steps,
+    double caloriesBurned = 0.0,
+    int activeMinutes = 0,
+    String? date,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/activity/steps/sync',
+      data: {
+        'steps': steps,
+        'calories_burned': caloriesBurned,
+        'active_minutes': activeMinutes,
+        if (date != null) 'date': date,
+      },
+    );
+    return res.data!;
+  }
+
+  Future<Map<String, dynamic>> getStreak() async {
+    final res = await _dio.get<Map<String, dynamic>>('/activity/streak');
+    return res.data!;
+  }
+
+  Future<Map<String, dynamic>> startActivitySession(String activityType) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/activity/sessions/start',
+      data: {'activity_type': activityType},
+    );
+    return res.data!;
+  }
+
+  Future<Map<String, dynamic>> completeActivitySession(
+    String activityId, {
+    required int steps,
+    required double distanceM,
+    required double caloriesBurned,
+    double? avgPaceSPerKm,
+    List<Map<String, double>>? polyline,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/activity/sessions/$activityId/complete',
+      data: {
+        'steps': steps,
+        'distance_m': distanceM,
+        'calories_burned': caloriesBurned,
+        if (avgPaceSPerKm != null) 'avg_pace_s_per_km': avgPaceSPerKm,
+        if (polyline != null) 'polyline': polyline,
+      },
+    );
+    return res.data!;
+  }
+
+  Future<List<Map<String, dynamic>>> listActivitySessions() async {
+    final res = await _dio.get<List<dynamic>>('/activity/sessions');
+    return res.data!.cast<Map<String, dynamic>>();
+  }
+
+  Future<void> updateStepGoal(int goal) async {
+    await _dio.put<void>('/activity/steps/goal', data: {'goal': goal});
+  }
 }

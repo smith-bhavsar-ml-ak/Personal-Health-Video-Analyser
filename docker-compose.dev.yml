@@ -24,13 +24,13 @@ services:
     volumes:
       - ./backend:/app
     environment:
-      - OLLAMA_HOST=http://host.docker.internal:11434
       - DATABASE_URL=postgresql://phva:phva_dev@postgres:5432/phva
       - ENV=development
       - SECRET_KEY=dev-secret-key-change-in-production
       - ALLOWED_ORIGINS=http://localhost:3000
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      # Set GROQ_API_KEY in your shell or a .env file:  export GROQ_API_KEY=gsk_...
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-llama-3.1-8b-instant}
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       postgres:
