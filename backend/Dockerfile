@@ -14,8 +14,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# CPU-only PyTorch — avoids 2.4 GB CUDA download.
+# The +cpu suffix only exists for torch>=2.6; for 2.4.x the index-url alone is enough.
+RUN pip install --no-cache-dir \
+    torch==2.4.1 \
+    --index-url https://download.pytorch.org/whl/cpu
+
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 

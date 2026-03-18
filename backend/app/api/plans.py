@@ -7,7 +7,7 @@ from app.auth.deps import get_current_user
 from app.db.database import get_db
 from app.db import crud
 from app.db.models import User
-from app.feedback.llm import _client, MODEL, OLLAMA_TIMEOUT
+from app.feedback.llm import _client, MODEL
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -51,14 +51,14 @@ def _generate_plan_llm(profile: dict) -> dict:
         "Generate a personalised 4-week workout plan."
     )
     try:
-        response = _client.chat(
+        response = _client.chat.completions.create(
             model=MODEL,
             messages=[
                 {"role": "system", "content": _PLAN_SYSTEM},
                 {"role": "user", "content": prompt},
             ],
         )
-        text = response["message"]["content"].strip()
+        text = (response.choices[0].message.content or "").strip()
         # Strip markdown code fences if present
         if text.startswith("```"):
             text = text.split("```")[1]

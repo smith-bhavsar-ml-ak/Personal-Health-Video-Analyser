@@ -18,8 +18,15 @@ RUN apt-get update && apt-get install -y \
 
 # Install Python deps first (layer cached unless requirements.txt changes)
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install CPU-only PyTorch first so pip never downloads the 2.4 GB CUDA wheels.
+# The +cpu suffix only exists for torch>=2.6; for 2.4.x the index-url alone is enough.
+RUN pip install --no-cache-dir \
+    torch==2.4.1 \
+    --index-url https://download.pytorch.org/whl/cpu
+
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend source
 COPY backend/ .
