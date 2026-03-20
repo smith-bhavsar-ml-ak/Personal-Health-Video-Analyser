@@ -5,7 +5,9 @@ services:
     environment:
       POSTGRES_DB: phva
       POSTGRES_USER: phva
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -13,37 +15,37 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
 
   backend:
     build: ./backend
     container_name: phva-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
     environment:
       - DATABASE_URL=postgresql://phva:${POSTGRES_PASSWORD}@postgres:5432/phva
-      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost}
-      - GROQ_API_KEY=${GROQ_API_KEY:?GROQ_API_KEY is required}
-      - LLM_MODEL=${LLM_MODEL:-llama-3.1-8b-instant}
+      - ENV=development
+      - SECRET_KEY=${SECRET_KEY}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - LLM_MODEL=${LLM_MODEL}
       - LLM_TIMEOUT=${LLM_TIMEOUT:-30}
-      - MAX_VIDEO_SIZE_MB=${MAX_VIDEO_SIZE_MB:-200}
-      - ANALYZE_RATE_LIMIT=${ANALYZE_RATE_LIMIT:-10/minute}
+      - MAX_VIDEO_SIZE_MB=${MAX_VIDEO_SIZE_MB}
+      - ANALYZE_RATE_LIMIT=${ANALYZE_RATE_LIMIT}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       postgres:
         condition: service_healthy
-    restart: unless-stopped
 
   flutter-web:
     build:
       context: ./app
       args:
-        # Leave blank to use relative /api/v1 (nginx proxy on same origin).
-        # Set to full backend URL for separate-service deployments:
-        #   API_BASE=https://phva-backend.railway.app/api/v1
         API_BASE: ${API_BASE:-}
     container_name: phva-flutter-web
     depends_on:
       - backend
-    restart: unless-stopped
 
   nginx:
     image: nginx:alpine
@@ -55,7 +57,6 @@ services:
     depends_on:
       - backend
       - flutter-web
-    restart: unless-stopped
 
 volumes:
   postgres_data:
