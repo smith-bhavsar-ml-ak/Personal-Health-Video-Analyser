@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System deps for OpenCV + MediaPipe + pyttsx3
+# System deps for OpenCV + MediaPipe
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
@@ -16,8 +16,7 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# CPU-only PyTorch — avoids 2.4 GB CUDA download.
-# The +cpu suffix only exists for torch>=2.6; for 2.4.x the index-url alone is enough.
+# Install CPU-only PyTorch — avoids the 2.4 GB CUDA wheels.
 RUN pip install --no-cache-dir \
     torch==2.4.1 \
     --index-url https://download.pytorch.org/whl/cpu
@@ -26,7 +25,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Ensure data directory exists
 RUN mkdir -p /app/data
 
 EXPOSE 8000
